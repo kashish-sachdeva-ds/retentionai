@@ -1,1 +1,9 @@
-/venv
+.venv/
+
+# Ignore generated datasets
+data/raw/*
+data/processed/*
+
+# Keep folder structure
+!data/raw/.gitkeep
+!data/processed/.gitkeep
