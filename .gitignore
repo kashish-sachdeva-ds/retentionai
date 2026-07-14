@@ -1,5 +1,7 @@
 .venv/
 
+__pycache__/
+
 # Ignore generated datasets
 data/raw/*
 data/processed/*
