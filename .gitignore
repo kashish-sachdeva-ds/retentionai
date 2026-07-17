@@ -12,3 +12,5 @@ data/processed/*
 
 models/*
 !models/.gitkeep
+
+*.egg-info/
