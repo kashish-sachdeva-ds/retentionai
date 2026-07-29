@@ -7,10 +7,10 @@ data/raw/*
 data/processed/*
 
 # Keep folder structure
-!data/raw/.gitkeep
-!data/processed/.gitkeep
+!data/raw/README.md
+!data/processed/README.md
 
 models/*
-!models/.gitkeep
+!models/README.md
 
 *.egg-info/
