@@ -28,6 +28,7 @@ import json
 from contextlib import asynccontextmanager
 
 import numpy as np
+import pandas as pd
 import redis
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from pydantic import BaseModel
@@ -45,6 +46,11 @@ from src.modeling.conformal import (
     mondrian_thresholds,
     nonconformity_scores,
 )
+from src.monitoring.drift import check_drift_report
+
+RECENT_SCORES_KEY = "monitoring:recent_scores"
+RECENT_SCORES_MAX = 1000
+DRIFT_CHECK_MIN_SAMPLES = 30  # below this, PSI/KS are too noisy on so few points to trust
 
 ARM_NAMES = ["discount", "technician", "control"]
 ALPHA_CONFORMAL = 0.05
@@ -57,6 +63,8 @@ class ModelState:
     artifacts = None
     conformal_thresholds = None
     rng = None
+    reference_scores = None  # calibrated P(churn) on the calibration set --
+                              # the baseline distribution live traffic gets compared against
 
 
 state = ModelState()
@@ -91,6 +99,7 @@ async def lifespan(app: FastAPI):
     state.artifacts = artifacts
     state.conformal_thresholds = thresholds
     state.rng = np.random.default_rng()
+    state.reference_scores = calibrated_probs_calib[:, 1]  # the baseline live scores get compared against
 
     yield
     # no teardown needed -- nothing external is held open besides the
@@ -161,6 +170,8 @@ def predict(customer: CustomerRequest, background_tasks: BackgroundTasks):
     model_input = transform_customer_for_inference(raw, state.artifacts)
 
     calibrated_prob = float(state.calibrated_model.predict_proba(model_input)[0, 1])
+    redis_client.lpush(RECENT_SCORES_KEY, calibrated_prob)
+    redis_client.ltrim(RECENT_SCORES_KEY, 0, RECENT_SCORES_MAX - 1)
 
     probs_2col = np.array([[1 - calibrated_prob, calibrated_prob]])
     pred_set = conformal_prediction_sets(probs_2col, state.conformal_thresholds, classes=[0, 1])[0]
@@ -196,6 +207,39 @@ def get_counterfactual(request_id: str):
     if payload is None:
         return {"status": "pending_or_not_found"}
     return json.loads(payload)
+
+
+@app.get("/monitoring/drift")
+def check_drift():
+    """Compares live traffic's calibrated churn-probability distribution
+    against the calibration set's reference distribution -- monitoring
+    the model's own output, not every input feature individually (see
+    src/monitoring/drift.py for why). Genuinely new to this stage, not a
+    gap carried over from Stage 12b -- no monitoring module existed
+    before this stage built and tested one."""
+    recent_raw = redis_client.lrange(RECENT_SCORES_KEY, 0, -1)
+    recent_scores = np.array([float(s) for s in recent_raw])
+
+    if len(recent_scores) < DRIFT_CHECK_MIN_SAMPLES:
+        return {
+            "status": "insufficient_data",
+            "n_recent_predictions": len(recent_scores),
+            "minimum_required": DRIFT_CHECK_MIN_SAMPLES,
+        }
+
+    reference_df = pd.DataFrame({"score": state.reference_scores})
+    current_df = pd.DataFrame({"score": recent_scores})
+    report = check_drift_report(reference_df, current_df, columns=["score"])
+    row = report.iloc[0]
+
+    return {
+        "status": "ok",
+        "n_recent_predictions": len(recent_scores),
+        "psi": row["psi"],
+        "psi_interpretation": row["psi_interpretation"],
+        "ks_p_value": row["ks_p_value"],
+        "ks_drift_detected": bool(row["ks_drift_detected"]),
+    }
 
 
 @app.post("/feedback/{arm_name}")
