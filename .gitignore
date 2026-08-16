@@ -5,6 +5,7 @@ __pycache__/
 # Ignore generated datasets
 data/raw/*
 data/processed/*
+data/*.csv
 
 # Keep folder structure
 !data/raw/README.md
@@ -16,3 +17,4 @@ models/*
 *.egg-info/
 
 .pytest_cache/
+
