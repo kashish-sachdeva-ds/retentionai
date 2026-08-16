@@ -46,6 +46,11 @@ jobs:
         # stand-in every notebook and test in this repo already uses.
         run: python scripts/generate_synthetic.py
 
+      - name: Prepare test dataset
+        run: |
+          mkdir -p data/raw
+          cp data/sample_synthetic.csv data/raw/telco_churn.csv
+
       - name: Run test suite
         run: python -m pytest tests/ -v --tb=short
         env:
