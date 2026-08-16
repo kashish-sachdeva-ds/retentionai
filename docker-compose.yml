@@ -1,0 +1,49 @@
+# See ADR-015: written carefully, NOT run-tested end-to-end in the
+# environment that authored it (no Docker daemon available there). The
+# individual pieces this wires together (the API, the dashboard, the
+# Redis-backed bandit) were each verified for real against a genuine
+# Redis instance and a live uvicorn server -- what's unverified here
+# specifically is the container orchestration layer itself.
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_HOST=redis
+    volumes:
+      - ./data:/app/data:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s  # model trains at startup (ADR-014) -- needs real time before /health is meaningful
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    ports:
+      - "8501:8501"
+    environment:
+      - RETENTIONAI_API_URL=http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy

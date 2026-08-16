@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential libgomp1
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate synthetic placeholder data
+        # data/*.csv is gitignored (ADR-003) -- CI has no Kaggle credentials
+        # to pull the real dataset, so it runs against the same synthetic
+        # stand-in every notebook and test in this repo already uses.
+        run: python scripts/generate_synthetic.py
+
+      - name: Run test suite
+        run: pytest tests/ -v --tb=short
+        env:
+          REDIS_HOST: localhost
+
+  # A real deploy job would build and push the Docker images here (see
+  # ADR-015 -- the Dockerfiles are written but not build-verified yet).
+  # Deliberately left as a placeholder rather than wired to a real
+  # registry/credentials that don't exist for this portfolio project.
+  # build-and-push:
+  #   needs: test
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Build API image
+  #       run: docker build -f api/Dockerfile -t retentionai-api .
+  #     - name: Build dashboard image
+  #       run: docker build -f dashboard/Dockerfile -t retentionai-dashboard .
