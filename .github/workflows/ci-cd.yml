@@ -35,7 +35,11 @@ jobs:
           sudo apt-get install -y --no-install-recommends build-essential libgomp1
 
       - name: Install Python dependencies
-        run: pip install -r requirements.txt
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pytest
+
 
       - name: Generate synthetic placeholder data
         # data/*.csv is gitignored (ADR-003) -- CI has no Kaggle credentials
@@ -44,7 +48,7 @@ jobs:
         run: python scripts/generate_synthetic.py
 
       - name: Run test suite
-        run: pytest tests/ -v --tb=short
+        run: python -m pytest tests/ -v --tb=short
         env:
           REDIS_HOST: localhost
 
