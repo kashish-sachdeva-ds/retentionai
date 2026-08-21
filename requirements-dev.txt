@@ -2,3 +2,4 @@
 
 ipykernel==7.3.0
 pytest==9.1.1
+httpx2==2.12.0  # starlette.testclient prefers this over httpx; clears the deprecation warning
