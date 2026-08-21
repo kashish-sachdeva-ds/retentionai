@@ -68,6 +68,8 @@ def find_counterfactual(
     scaled_columns: list,
     grids: dict = None,
     desired_class: int = 0,
+    threshold: float = 0.5,
+    has_internet: bool = True,
 ):
     """instance_model_input: the row exactly as the model expects it
     (scaled, encoded -- one row from X_test). instance_raw: the SAME
@@ -79,6 +81,16 @@ def find_counterfactual(
     order the scaler was fit on (Stage 6 scales every encoded column, not
     just continuous ones, so this includes the binary dummies too).
 
+    threshold: the probability threshold for the decision. The API should
+    pass the ADR-002 cost-sensitive threshold (0.083) so the
+    counterfactual's decision boundary matches the displayed calibrated
+    probability -- NOT the raw model's default 0.5.
+
+    has_internet: if False, OnlineSecurity_Yes and TechSupport_Yes are
+    locked to 0 -- a customer without internet service cannot be offered
+    these add-ons, and proposing them would be an infeasible
+    recommendation.
+
     Returns the minimal-cost combination of actionable feature values
     that flips the model's prediction to `desired_class`, or None if
     nothing in the grid achieves it -- itself a real, meaningful finding:
@@ -86,6 +98,16 @@ def find_counterfactual(
     alone.
     """
     grids = grids or ACTIONABLE_GRIDS
+
+    # Post-audit fix (Blocker 3): if the customer has no internet service,
+    # internet-dependent add-ons are infeasible -- lock them to 0 rather
+    # than searching over impossible combinations.
+    if not has_internet:
+        grids = dict(grids)
+        for internet_addon in ("OnlineSecurity_Yes", "TechSupport_Yes"):
+            if internet_addon in grids:
+                grids[internet_addon] = [0]
+
     feature_names = list(grids.keys())
     value_lists = [grids[f] for f in feature_names]
 
@@ -115,8 +137,17 @@ def find_counterfactual(
             scaled_value = scaler.transform(dummy_row)[0, col_idx]
             candidate_model_input[f] = scaled_value
 
-        pred_class = model.predict(pd.DataFrame([candidate_model_input]))[0]
-        if pred_class == desired_class:
+        # Post-audit fix (Blocker 2): use predict_proba + the calibrated
+        # threshold instead of predict()'s hardcoded 0.5 boundary.
+        churn_prob = model.predict_proba(pd.DataFrame([candidate_model_input]))[0, 1]
+        if desired_class == 0 and churn_prob < threshold:
+            is_desired = True
+        elif desired_class == 1 and churn_prob >= threshold:
+            is_desired = True
+        else:
+            is_desired = False
+
+        if is_desired:
             cost = _cost(instance_raw, candidate_raw, grids)
             if cost < best_cost:
                 best_cost = cost

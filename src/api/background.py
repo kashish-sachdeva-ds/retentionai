@@ -23,13 +23,18 @@ def compute_and_store_counterfactual(
     scaler,
     scaled_columns: list,
     redis_client: redis.Redis,
+    threshold: float = 0.5,
+    has_internet: bool = True,
 ) -> None:
     """scaled_columns must be the FULL encoded column list the scaler was
     fit on (artifacts["encoded_columns"]), not a continuous-only subset --
     find_counterfactual() needs to locate every actionable feature
     (including binary dummies like ContractCommitmentMonths) by name
     within this list."""
-    result = find_counterfactual(model, instance_model_input, instance_raw, scaler, scaled_columns)
+    result = find_counterfactual(
+        model, instance_model_input, instance_raw, scaler, scaled_columns,
+        threshold=threshold, has_internet=has_internet,
+    )
 
     payload = {
         "status": "ready",
