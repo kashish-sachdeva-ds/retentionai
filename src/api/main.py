@@ -31,7 +31,9 @@ import numpy as np
 import pandas as pd
 import redis
 from fastapi import BackgroundTasks, FastAPI, HTTPException
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, Field
 from sklearn.model_selection import train_test_split
 
 from src.api.background import compute_and_store_counterfactual
@@ -115,26 +117,38 @@ redis_client = redis.Redis(
 )
 
 
+NoYes = Literal["No", "Yes"]
+NoYesNoInternet = Literal["No", "Yes", "No internet service"]
+
+
 class CustomerRequest(BaseModel):
-    tenure: int
-    MonthlyCharges: float
-    TotalCharges: float
-    SeniorCitizen: int
-    Contract: str
-    InternetService: str
-    OnlineSecurity: str
-    OnlineBackup: str
-    DeviceProtection: str
-    TechSupport: str
-    StreamingTV: str
-    StreamingMovies: str
-    PaymentMethod: str
-    gender: str
-    Partner: str
-    Dependents: str
-    PhoneService: str
-    MultipleLines: str
-    PaperlessBilling: str
+    # Bounds are sanity checks, not the real dataset's exact observed
+    # range (0-72mo tenure) -- kept a little generous rather than
+    # coupling API validation to today's data distribution.
+    tenure: int = Field(ge=0, le=100)
+    MonthlyCharges: float = Field(ge=0, le=1000)
+    TotalCharges: float = Field(ge=0)
+    SeniorCitizen: Literal[0, 1]
+    Contract: Literal["Month-to-month", "One year", "Two year"]
+    InternetService: Literal["DSL", "Fiber optic", "No"]
+    OnlineSecurity: NoYesNoInternet
+    OnlineBackup: NoYesNoInternet
+    DeviceProtection: NoYesNoInternet
+    TechSupport: NoYesNoInternet
+    StreamingTV: NoYesNoInternet
+    StreamingMovies: NoYesNoInternet
+    PaymentMethod: Literal[
+        "Bank transfer (automatic)",
+        "Credit card (automatic)",
+        "Electronic check",
+        "Mailed check",
+    ]
+    gender: Literal["Female", "Male"]
+    Partner: NoYes
+    Dependents: NoYes
+    PhoneService: NoYes
+    MultipleLines: Literal["No", "Yes", "No phone service"]
+    PaperlessBilling: NoYes
 
 
 class PredictionResponse(BaseModel):
