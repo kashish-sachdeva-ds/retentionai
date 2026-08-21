@@ -1,17 +1,19 @@
 # RetentionAI
 
-Customer churn prediction for a telecom business — built to practice
-staged, decision-documented ML engineering end to end, not just "train a
-model on a Kaggle CSV and report accuracy."
+[![CI](https://github.com/kashish-sachdeva-ds/retentionai/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/kashish-sachdeva-ds/retentionai/actions/workflows/ci-cd.yml)
 
-## Status: In progress — Stage 7 of ~13 complete
+Customer churn prediction and retention-offer system for a telecom
+business — built to practice staged, decision-documented ML engineering
+end to end, not just "train a model on a Kaggle CSV and report accuracy."
+
+## Status: Complete — Stages 1–13
 
 Every stage is backed by an Architecture Decision Record (ADR) in
 `docs/decisions/`, documenting what was decided and *why*, not just what
-the code does. Start with `docs/decisions/ADR-000-staged-build-process.md`
-for why the project is built this way — including an earlier, ungrounded
-attempt that got reset once it became clear code was being written before
-the problem was actually framed.
+the code does — 16 ADRs covering everything from the initial problem
+framing through production deployment, plus `ADR-000`, which documents
+why the project restarted at Stage 1 after an early, ungrounded false
+start.
 
 ## Problem
 
@@ -23,9 +25,8 @@ no longer needing service) isn't actionable.
 
 Success metric is PR-AUC, not accuracy — the dataset is ~26.5% churn, and
 accuracy rewards a model that just predicts "no churn" for everyone.
-Precision/Recall at the top 20% of the ranking is tracked alongside it,
-mapping directly to a real retention-team call capacity constraint
-(`ADR-002`).
+Precision/Recall at a fixed retention-team call budget is tracked
+alongside it (`ADR-002`).
 
 ## What's done
 
@@ -38,45 +39,80 @@ mapping directly to a real retention-team call capacity constraint
 | 5 | Feature engineering, IV-scored | `ADR-006`, `notebooks/04_feature_engineering.ipynb`, `src/features/iv.py` |
 | 6 | Leakage-safe pipeline (encoding, VIF) | `ADR-007`, `notebooks/05_pipeline.ipynb`, `src/features/pipeline.py`, `src/features/vif.py` |
 | 7 | Baseline model (logistic regression) | `ADR-008`, `notebooks/06_baseline_model.ipynb` |
+| 8 | Champion model (XGBoost) | `ADR-009`, `notebooks/07_champion_model.ipynb` |
+| 9 | Calibration + conformal prediction | `ADR-010`, `notebooks/08_calibration_conformal.ipynb` |
+| 10 | Survival analysis (Cox PH) | `ADR-011`, `notebooks/09_survival_analysis.ipynb`, `src/survival/cox.py` |
+| 11 | Thompson Sampling retention offers | `ADR-012`, `notebooks/10_thompson_sampling.ipynb`, `src/bandit/thompson.py` |
+| 12a | Counterfactual explanations | `ADR-013`, `notebooks/11_counterfactual_explanations.ipynb`, `src/explain/counterfactual.py` |
+| 12b | Production API | `ADR-014`, `notebooks/12_production_api.ipynb`, `src/api/` |
+| 12c | Docker, CI, dashboard | `ADR-015`, `docker-compose.yml`, `dashboard/` |
+| 13 | SHAP explanations | `ADR-016`, `notebooks/13_shap_explanations.ipynb`, `src/explain/shap_explainer.py` |
 
-## Current baseline
+## Champion model
 
-Logistic regression, `class_weight=none` (compared directly against
-`balanced` in `ADR-008` rather than assumed):
+XGBoost, confirmed winner on real data across every metric that matters
+(`ADR-009`), evaluated head-to-head against the logistic regression
+baseline with identical data, identical scoring functions, and a fixed
+call-budget K:
 
-- **PR-AUC: 0.6331**
-- ROC-AUC: 0.8380
-- Precision@20%: 0.642 — of the top 20% of customers by predicted risk,
-  64% genuinely churn
-- Recall@20%: 0.484
+- **PR-AUC: 0.6466** (vs. 0.6331 for the baseline)
+- Precision@100: 0.810
+- Recall@100: 0.217
 
-This is the floor the next stage has to beat, not a candidate for
-production.
+Calibrated with isotonic regression and served through Mondrian
+conformal prediction sets, so every prediction ships with a 95%-coverage
+uncertainty set, not just a point estimate (`ADR-010`). On top of that:
+survival analysis for time-to-churn (`ADR-011`), Thompson Sampling for
+retention-offer selection (`ADR-012`), counterfactual explanations for
+actionable "what would change this" recommendations (`ADR-013`), and
+SHAP for global/local interpretability (`ADR-016`) — all wired into a
+live FastAPI service and Streamlit dashboard.
 
-## Up next
+## Run it
 
-- **Stage 8** — champion model (tree-based), evaluated against this
-  baseline
-- **Stage 9** — calibration + conformal prediction
-- **Stage 10+** — survival analysis (time-to-churn), retention-offer
-  targeting, counterfactual explanations, production API
-
-## Setup
-
+**With Docker:**
 ```bash
-git clone <repo-url>
+docker compose up --build
+```
+- Dashboard: http://localhost:8501
+- API docs: http://localhost:8000/docs
+
+**Without Docker:**
+```bash
+git clone https://github.com/kashish-sachdeva-ds/retentionai.git
 cd retentionai
 python -m venv .venv
-.venv\Scripts\activate      # Windows
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -e .
 pip install -r requirements.txt
 ```
 
-Data isn't tracked in git (`data/raw/`, `data/processed/` are
-gitignored — see `ADR-003` for why). Place the
-[Telco Customer Churn dataset](https://www.kaggle.com/datasets/blastchar/telco-customer-churn)
-at `data/raw/telco_churn.csv`, then run the notebooks in order,
-`01` through `06`.
+Data isn't tracked in git (`data/raw/`, `data/processed/` are gitignored
+— see `ADR-003` for why). Two ways to get it:
+- **Manual (simplest):** download the [Telco Customer Churn
+  dataset](https://www.kaggle.com/datasets/blastchar/telco-customer-churn)
+  and place it at `data/raw/telco_churn.csv`.
+- **Kaggle CLI:** set up [Kaggle API
+  credentials](https://github.com/Kaggle/kaggle-api#api-credentials),
+  then run `notebooks/01_data_extraction.ipynb` — it downloads and places
+  the file for you, and skips automatically if the CSV already exists.
+
+Then run the notebooks in order, `01` through `13`.
+
+## Testing
+
+```bash
+pip install -r requirements-dev.txt
+docker run -d -p 6379:6379 redis:7-alpine   # tests need a real Redis instance
+python -m pytest tests/ -v
+```
+
+## What's next
+
+- Stratified Cox re-fit by `ContractCommitmentMonths` — the proportional
+  hazards assumption currently holds for only 1 of 5 covariates (`ADR-011`)
+- Wire SHAP explanations into the API/dashboard (currently notebook-only,
+  `ADR-016`)
 
 ## Why it's structured this way
 
