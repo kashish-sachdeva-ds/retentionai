@@ -18,18 +18,6 @@ gives each class its own guarantee, which matters here because the two
 classes have very different calibration-set sizes (imbalanced churn
 rate) and pooling would let the majority class's easier scores dominate
 the threshold used for the minority class too.
-"""
-
-"""
-Stage 9 — Mondrian (class-conditional) conformal prediction, built from
-scratch rather than a library (MAPIE, etc.).
-
-Reasoning for building it directly: the goal throughout this project has
-been understanding a technique well enough to defend it under
-questioning, not just calling a library function. A hand-built version,
-once tested, demonstrates the actual mechanism -- a library call alone
-doesn't. MAPIE remains a reasonable choice for hardening this into
-production later, once the underlying idea is solid here.
 
 Why Mondrian specifically, not standard/global conformal prediction:
 standard split-conformal guarantees MARGINAL coverage -- "95% of the

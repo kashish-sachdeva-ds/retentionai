@@ -108,6 +108,9 @@ def fit_transform_train(X_train: pd.DataFrame, y_train: pd.Series):
 
     # --- one-hot encode surviving multi-category columns ---
     cat_cols = [c for c in MULTI_CATEGORY_COLS if c in X_filtered.columns]
+    cat_categories = {c: sorted(X_filtered[c].dropna().unique().tolist()) for c in cat_cols}
+    for c in cat_cols:
+        X_filtered[c] = pd.Categorical(X_filtered[c], categories=cat_categories[c])
     X_encoded = pd.get_dummies(X_filtered, columns=cat_cols, drop_first=True).astype(float)
 
     # --- VIF filter on the encoded numeric matrix ---
@@ -125,6 +128,7 @@ def fit_transform_train(X_train: pd.DataFrame, y_train: pd.Series):
         "iv_table": iv_table,
         "iv_keep": iv_keep,
         "cat_cols": cat_cols,
+        "cat_categories": cat_categories,
         "vif_dropped": vif_dropped,
         "final_vif_table": final_vif_table,
         "encoded_columns": X_vif.columns.tolist(),
@@ -138,6 +142,9 @@ def transform_new(X_new: pd.DataFrame, artifacts: dict) -> pd.DataFrame:
     production data later). No fitting happens here -- only application
     of decisions already made on training data."""
     X_filtered = X_new[artifacts["iv_keep"]].copy()
+    for c in artifacts["cat_cols"]:
+        if "cat_categories" in artifacts and c in artifacts["cat_categories"]:
+            X_filtered[c] = pd.Categorical(X_filtered[c], categories=artifacts["cat_categories"][c])
     X_encoded = pd.get_dummies(X_filtered, columns=artifacts["cat_cols"], drop_first=True).astype(float)
     # Align exactly to what training produced: a category unseen in this
     # slice gets a 0 column instead of silently shifting every column

@@ -16,6 +16,8 @@ numbers are made up, not measured.
 import numpy as np
 import pandas as pd
 
+from src.config import PROJECT_ROOT
+
 RNG = np.random.default_rng(7)
 N = 1500
 
@@ -115,5 +117,7 @@ def generate(n: int = N) -> pd.DataFrame:
 
 if __name__ == "__main__":
     data = generate()
-    data.to_csv("data/sample_synthetic.csv", index=False)
-    print(f"Wrote data/sample_synthetic.csv — shape {data.shape}, churn rate {(data['Churn'] == 'Yes').mean():.3f}")
+    output_path = PROJECT_ROOT / "data" / "sample_synthetic.csv"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    data.to_csv(output_path, index=False)
+    print(f"Wrote {output_path} — shape {data.shape}, churn rate {(data['Churn'] == 'Yes').mean():.3f}")
