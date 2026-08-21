@@ -1,51 +1,61 @@
 import numpy as np
-import pandas as pd
 
-from src.monitoring.drift import check_drift_report, _psi_for_column, _interpret_psi
+from src.bandit.thompson import ThompsonSamplingBandit, simulate_historical_log, offline_replay_evaluation
 
 
-def test_psi_near_zero_for_identical_distributions():
+def test_uniform_prior_gives_no_arm_a_starting_advantage():
+    bandit = ThompsonSamplingBandit(["a", "b", "c"])
+    assert bandit.alpha == {"a": 1.0, "b": 1.0, "c": 1.0}
+    assert bandit.beta == {"a": 1.0, "b": 1.0, "c": 1.0}
+    assert bandit.posterior_means() == {"a": 0.5, "b": 0.5, "c": 0.5}
+
+
+def test_update_with_success_increases_posterior_mean():
+    bandit = ThompsonSamplingBandit(["a"])
+    before = bandit.posterior_means()["a"]
+    bandit.update("a", reward=1)
+    after = bandit.posterior_means()["a"]
+    assert after > before
+
+
+def test_update_with_failure_decreases_posterior_mean():
+    bandit = ThompsonSamplingBandit(["a"])
+    before = bandit.posterior_means()["a"]
+    bandit.update("a", reward=0)
+    after = bandit.posterior_means()["a"]
+    assert after < before
+
+
+def test_select_arm_favors_the_arm_with_more_successes():
+    bandit = ThompsonSamplingBandit(["good", "bad"])
+    for _ in range(50):
+        bandit.update("good", reward=1)
+        bandit.update("bad", reward=0)
+
     rng = np.random.default_rng(0)
-    ref = rng.beta(2, 5, 2000)
-    cur = rng.beta(2, 5, 2000)
-    psi = _psi_for_column(ref, cur)
-    assert psi < 0.1
+    picks = [bandit.select_arm(rng) for _ in range(200)]
+    assert picks.count("good") > picks.count("bad")
 
 
-def test_psi_high_for_clearly_shifted_distributions():
+def test_offline_replay_only_updates_on_matched_events():
     rng = np.random.default_rng(0)
-    ref = rng.beta(2, 5, 1000)   # low values
-    cur = rng.beta(5, 2, 1000)   # high values -- genuinely different population
-    psi = _psi_for_column(ref, cur)
-    assert psi > 0.25
+    true_rates = {"a": 0.9, "b": 0.1}
+    log = simulate_historical_log(1000, list(true_rates.keys()), true_rates, rng)
+    bandit = ThompsonSamplingBandit(list(true_rates.keys()))
+
+    match_rate, history = offline_replay_evaluation(bandit, log, rng)
+
+    total_updates = (bandit.alpha["a"] + bandit.beta["a"] - 2) + (bandit.alpha["b"] + bandit.beta["b"] - 2)
+    assert total_updates == round(match_rate * len(log))
+    assert len(history) == round(match_rate * len(log))
 
 
-def test_interpret_psi_thresholds():
-    assert _interpret_psi(0.05) == "no significant shift"
-    assert _interpret_psi(0.15) == "moderate shift -- worth watching"
-    assert _interpret_psi(0.5) == "significant shift -- investigate"
+def test_offline_replay_recovers_correct_ranking():
+    rng = np.random.default_rng(1)
+    true_rates = {"best": 0.8, "worst": 0.2}
+    log = simulate_historical_log(20000, list(true_rates.keys()), true_rates, rng)
+    bandit = ThompsonSamplingBandit(list(true_rates.keys()))
+    offline_replay_evaluation(bandit, log, rng)
 
-
-def test_ks_false_positive_rate_matches_theoretical_expectation():
-    """At p<0.05, ~5% of checks should flag 'drift' even with zero real
-    difference -- verified directly rather than assumed, so an isolated
-    flag doesn't get over-interpreted later."""
-    flagged = 0
-    n_trials = 100
-    for seed in range(n_trials):
-        rng = np.random.default_rng(seed)
-        reference = pd.DataFrame({"score": rng.beta(2, 5, 1000)})
-        current = pd.DataFrame({"score": rng.beta(2, 5, 300)})
-        report = check_drift_report(reference, current, columns=["score"])
-        if report["ks_drift_detected"].iloc[0]:
-            flagged += 1
-    assert 0 <= flagged <= 15  # generous band around the theoretical ~5
-
-
-def test_check_drift_report_returns_one_row_per_column():
-    rng = np.random.default_rng(0)
-    reference = pd.DataFrame({"a": rng.normal(size=500), "b": rng.normal(size=500)})
-    current = pd.DataFrame({"a": rng.normal(size=200), "b": rng.normal(size=200)})
-    report = check_drift_report(reference, current, columns=["a", "b"])
-    assert list(report["column"]) == ["a", "b"]
-    assert {"psi", "psi_interpretation", "ks_statistic", "ks_p_value", "ks_drift_detected"} <= set(report.columns)
+    means = bandit.posterior_means()
+    assert means["best"] > means["worst"]

@@ -1,78 +1,102 @@
-import numpy as np
-import pandas as pd
+import redis
 import pytest
-from sklearn.model_selection import train_test_split
+from fastapi.testclient import TestClient
 
-from src.config import RAW_CSV_PATH
-from src.features.pipeline import run_stage6_split
-from src.modeling.champion import train_xgboost
-from src.modeling.calibration import calibrate_model, expected_calibration_error
-from src.modeling.conformal import (
-    nonconformity_scores, mondrian_thresholds, conformal_prediction_sets,
-    evaluate_class_conditional_coverage, average_set_size,
-)
+from src.api.main import app
+
+SAMPLE_CUSTOMER = {
+    "tenure": 3, "MonthlyCharges": 85.0, "TotalCharges": 255.0, "SeniorCitizen": 0,
+    "Contract": "Month-to-month", "InternetService": "Fiber optic",
+    "OnlineSecurity": "No", "OnlineBackup": "No", "DeviceProtection": "No",
+    "TechSupport": "No", "StreamingTV": "Yes", "StreamingMovies": "Yes",
+    "PaymentMethod": "Electronic check", "gender": "Female", "Partner": "No",
+    "Dependents": "No", "PhoneService": "Yes", "MultipleLines": "No", "PaperlessBilling": "Yes",
+}
 
 
 @pytest.fixture(scope="module")
-def calib_test_split():
-    df = pd.read_csv(RAW_CSV_PATH)
-    X_train, X_test_full, y_train, y_test_full, _ = run_stage6_split(df)
-    X_calib, X_test, y_calib, y_test = train_test_split(
-        X_test_full, y_test_full, test_size=0.5, random_state=7, stratify=y_test_full
-    )
-    model = train_xgboost(X_train, y_train)
-    return model, X_calib, y_calib, X_test, y_test
+def client():
+    # Shares db=0 with the live API dev instance -- a real, stated
+    # limitation (ADR-014 Trade-offs): running this suite resets live
+    # bandit/monitoring state as a side effect.
+    r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+    for key in r.keys("bandit:*") + r.keys("counterfactual:*") + r.keys("monitoring:*"):
+        r.delete(key)
+
+    with TestClient(app) as c:
+        yield c
 
 
-def test_ece_zero_for_perfectly_calibrated_predictions():
-    rng = np.random.default_rng(0)
-    y_prob = rng.uniform(0, 1, 5000)
-    y_true = rng.binomial(1, y_prob)  # true labels drawn EXACTLY from the stated probabilities
-    ece = expected_calibration_error(y_true, y_prob, n_bins=10)
-    assert ece < 0.03  # near zero, allowing for sampling noise
+def test_health_reports_model_loaded(client):
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "model_loaded": True}
 
 
-def test_ece_high_for_badly_miscalibrated_predictions():
-    y_true = np.array([0] * 100)
-    y_prob = np.array([0.9] * 100)  # confidently wrong every time
-    ece = expected_calibration_error(y_true, y_prob, n_bins=10)
-    assert ece > 0.8
+def test_predict_returns_all_expected_fields(client):
+    response = client.post("/predict", json=SAMPLE_CUSTOMER)
+    assert response.status_code == 200
+    body = response.json()
+    assert 0.0 <= body["calibrated_churn_probability"] <= 1.0
+    assert set(body["conformal_prediction_set"]) <= {0, 1}
+    assert body["recommended_arm"] in ("discount", "technician", "control")
+    assert body["counterfactual_status"] == "pending"
 
 
-def test_calibration_reduces_or_maintains_ece(calib_test_split):
-    model, X_calib, y_calib, X_test, y_test = calib_test_split
-    raw_probs = model.predict_proba(X_test)[:, 1]
-    raw_ece = expected_calibration_error(y_test.values, raw_probs)
+def test_counterfactual_eventually_becomes_ready(client):
+    import time
+    response = client.post("/predict", json=SAMPLE_CUSTOMER)
+    request_id = response.json()["request_id"]
 
-    calibrated_model = calibrate_model(model, X_calib, y_calib, method="isotonic")
-    calibrated_probs = calibrated_model.predict_proba(X_test)[:, 1]
-    calibrated_ece = expected_calibration_error(y_test.values, calibrated_probs)
+    result = None
+    for _ in range(30):
+        cf = client.get(f"/counterfactual/{request_id}").json()
+        if cf.get("status") == "ready":
+            result = cf
+            break
+        time.sleep(0.1)
 
-    # Not asserting calibration always wins -- Stage 9 found real cases
-    # where it doesn't by much. Asserting it doesn't make things drastically worse.
-    assert calibrated_ece < raw_ece + 0.05
-
-
-def test_mondrian_thresholds_raises_on_missing_class():
-    scores = np.array([0.1, 0.2, 0.3])
-    y = np.array([0, 0, 0])
-    with pytest.raises(ValueError):
-        mondrian_thresholds(scores, y, classes=[0, 1], alpha=0.05)
+    assert result is not None
+    assert "flippable" in result
 
 
-def test_conformal_coverage_meets_target_within_tolerance(calib_test_split):
-    model, X_calib, y_calib, X_test, y_test = calib_test_split
-    calibrated_model = calibrate_model(model, X_calib, y_calib, method="isotonic")
+def test_counterfactual_unknown_request_id_returns_pending_or_not_found(client):
+    response = client.get("/counterfactual/does-not-exist")
+    assert response.json()["status"] == "pending_or_not_found"
 
-    probs_calib = calibrated_model.predict_proba(X_calib)
-    scores = nonconformity_scores(probs_calib, y_calib.values)
-    thresholds = mondrian_thresholds(scores, y_calib.values, classes=[0, 1], alpha=0.05)
 
-    probs_test = calibrated_model.predict_proba(X_test)
-    pred_sets = conformal_prediction_sets(probs_test, thresholds, classes=[0, 1])
-    coverage_df = evaluate_class_conditional_coverage(pred_sets, y_test.values, classes=[0, 1])
+def test_feedback_updates_bandit_state(client):
+    before = client.post("/predict", json=SAMPLE_CUSTOMER).json()["recommended_arm"]
+    for _ in range(30):
+        fb = client.post("/feedback/discount", params={"retained": True})
+        assert fb.status_code == 200
 
-    # Allow real finite-sample slack -- Stage 9 documented a genuine miss
-    # on the minority class; this is a sanity bound, not a strict guarantee check.
-    assert (coverage_df["empirical_coverage"] > 0.80).all()
-    assert average_set_size(pred_sets) <= 2.0
+    picks = [client.post("/predict", json=SAMPLE_CUSTOMER).json()["recommended_arm"] for _ in range(50)]
+    assert picks.count("discount") > 25  # clearly favored after strong positive feedback
+
+
+def test_feedback_rejects_unknown_arm(client):
+    response = client.post("/feedback/not_a_real_arm", params={"retained": True})
+    assert response.status_code == 404
+
+
+def test_predict_rejects_malformed_request(client):
+    response = client.post("/predict", json={"tenure": 3})  # missing required fields
+    assert response.status_code == 422
+
+
+def test_drift_endpoint_reports_insufficient_data_before_threshold(client):
+    r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+    r.delete("monitoring:recent_scores")
+    response = client.get("/monitoring/drift")
+    body = response.json()
+    assert body["status"] == "insufficient_data"
+
+
+def test_drift_endpoint_reports_ok_after_enough_predictions(client):
+    for _ in range(35):
+        client.post("/predict", json=SAMPLE_CUSTOMER)
+    response = client.get("/monitoring/drift")
+    body = response.json()
+    assert body["status"] == "ok"
+    assert "psi" in body and "ks_p_value" in body

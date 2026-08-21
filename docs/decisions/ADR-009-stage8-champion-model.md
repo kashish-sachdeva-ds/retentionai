@@ -32,9 +32,10 @@ correct primary metric *before* a concrete K existed, since it didn't
 require committing to one. Now that K is fixed and known, the metric
 measured at that exact K is more informative than an average that
 includes cutoffs the business will never use.
-[Fill in once run on real data: did the two metrics actually disagree, or
-did one model simply win both? Record which happened — a clean sweep is
-itself a real finding, not a failure to need the tie-break rule.]
+**Result (real data):** the two decision metrics did not disagree.
+XGBoost won both PR-AUC (0.6466 vs. 0.6331) and Precision@K
+(0.810 vs. 0.780). The tie-break rule therefore was not needed for the
+real-data comparison. Recall@K also favored XGBoost (0.217 vs. 0.209).
 
 ## Decision Point 3 — Resolving ADR-006's open question on ContractCommitmentMonths
 **What happened:** `ADR-006` kept `ContractCommitmentMonths` over raw
@@ -45,8 +46,11 @@ could confirm it.
 importance (0.171).
 **Decision:** treat this as real corroboration of `ADR-006`'s reasoning,
 pending the real-data result.
-[Fill in once run on real data: rank and importance score, and whether
-it still lands in the top half of the feature list.]
+**Result (real data):** `ContractCommitmentMonths` ranked 1st out of 17
+features in XGBoost's native feature importance, with an importance score
+of 0.287. It therefore remained firmly in the top half of the feature list
+and strongly corroborated ADR-006's structural decision to retain the
+commitment-duration representation.
 
 ## Decision Point 4 — Expected-value ranking deliberately not built here
 **Decision:** ranking stays plain probability, not `P(churn) x CLV`.

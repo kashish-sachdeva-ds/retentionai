@@ -76,8 +76,6 @@ is present.
 **Reasoning:** same discipline as Stage 5's IV check — assuming a known
 failure mode without checking it is a discipline violation, not a
 shortcut.
-[Fill in once run on real data: raw ECE, calibrated ECE, and whether
-calibration meaningfully helped or the raw model was already reasonable.]
 
 **Result (real data):** raw ECE 0.0581, calibrated ECE 0.0472 — a real
 but modest 19% reduction, not a dramatic fix. Mean predicted P(churn)
@@ -94,10 +92,6 @@ alongside it.
 achieves 100% coverage and provides zero decision value. Coverage without
 an efficiency number is an incomplete, potentially misleading report of
 how useful the predictor actually is.
-[Fill in once run on real data: coverage per class, average set size, and
-whether either class's coverage landed slightly under the 0.95 target —
-expected finite-sample noise, not a bug, but worth stating plainly
-either way.]
 
 **Result (real data):** class 0 coverage 0.981 (n=518) — clears target.
 Class 1 coverage 0.882 (n=187) — does not clear target, and by enough

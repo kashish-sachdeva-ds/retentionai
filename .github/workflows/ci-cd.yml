@@ -22,10 +22,10 @@ jobs:
           --health-retries 5
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -56,16 +56,34 @@ jobs:
         env:
           REDIS_HOST: localhost
 
-  # A real deploy job would build and push the Docker images here (see
-  # ADR-015 -- the Dockerfiles are written but not build-verified yet).
-  # Deliberately left as a placeholder rather than wired to a real
-  # registry/credentials that don't exist for this portfolio project.
-  # build-and-push:
-  #   needs: test
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Build API image
-  #       run: docker build -f api/Dockerfile -t retentionai-api .
-  #     - name: Build dashboard image
-  #       run: docker build -f dashboard/Dockerfile -t retentionai-dashboard .
+  # Builds both images and brings the full docker-compose stack up against
+  # a real health check on every push. This is the actual verification for
+  # ADR-015's Docker build-test caveat.
+  # No registry push: this portfolio project has no real registry/credentials.
+
+  docker-build:
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build images
+        run: docker compose build
+
+      - name: Bring up the full stack
+        run: docker compose up -d
+
+      - name: Wait for API health check
+        run: timeout 120 bash -c 'until curl -sf http://localhost:8000/health; do sleep 3; done'
+
+      - name: Wait for dashboard health check
+        run: timeout 60 bash -c 'until curl -sf http://localhost:8501/_stcore/health; do sleep 3; done'
+
+      - name: Show container status on failure
+        if: failure()
+        run: docker compose ps && docker compose logs
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

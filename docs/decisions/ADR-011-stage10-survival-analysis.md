@@ -42,15 +42,17 @@ its own distinct meaning (has tech support, among those who could).
 
 ## Decision Point 3 — Test the proportional hazards assumption, don't assume it
 **Decision:** run `cph.check_assumptions()` before trusting any hazard
-ratio, rather than assuming constant relative hazards holds.
+ratio, rather than assuming constant relative hazards holds.  
 **Reasoning:** same discipline as every prior stage's "measure before
 acting" — VIF (Stage 6), the calibration distortion check (Stage 9). An
 assumption this central to the model's validity gets tested, not
-inherited from a prior model's convergence success.
-[Fill in once run on real data: did the assumption hold for every
-covariate, or did any fail? If any failed, `fit_cox_model_stratified()`
-is built and tested — apply it to the specific violating covariate, not
-preemptively to all of them.]
+inherited from a prior model's convergence success.  
+**Result (real data):** the proportional-hazards assumption did not hold
+for all covariates. Four of the five tested covariates violated the
+assumption; only `SeniorCitizen` passed. This is a substantive real-data
+finding rather than a code failure. The stratified Cox implementation is
+therefore retained for use with the specific violating covariates where
+appropriate, rather than stratifying every covariate indiscriminately.
 
 ## Decision Point 4 — `conditional_churn_probability` verified by hand, not trusted on faith
 **What happened:** the function computes `P(churn within window |

@@ -1,110 +1,56 @@
-import time
-import redis
+import numpy as np
+import pandas as pd
 import pytest
-import uvicorn
-import threading
-from pathlib import Path
-from streamlit.testing.v1 import AppTest
 
-from src.api.main import app
-
-# AppTest.from_file() resolves relative paths against the location of the
-# file calling it (this test file), not the working directory -- an
-# absolute path avoids that surprise entirely rather than working around it.
-DASHBOARD_APP_PATH = str(Path(__file__).resolve().parent.parent / "dashboard" / "app.py")
+from src.config import RAW_CSV_PATH
+from src.features.pipeline import run_stage6_split
+from src.modeling.baseline import train_logistic_regression, precision_at_k, recall_at_k
+from src.modeling.champion import train_xgboost
 
 
 @pytest.fixture(scope="module")
-def live_api_server():
-    """Real uvicorn server in a background thread -- app.py calls the API
-    over genuine HTTP, so testing it needs a genuine server listening,
-    not just an in-process TestClient (which app.py, as an external
-    caller, has no way to use)."""
-    r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
-    for key in r.keys("bandit:*") + r.keys("counterfactual:*") + r.keys("monitoring:*"):
-        r.delete(key)
-
-    config = uvicorn.Config(app, host="127.0.0.1", port=8001, log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-
-    for _ in range(60):
-        try:
-            import requests
-            requests.get("http://127.0.0.1:8001/health", timeout=1)
-            break
-        except Exception:
-            time.sleep(0.5)
-
-    yield "http://127.0.0.1:8001"
-    server.should_exit = True
+def split_data():
+    df = pd.read_csv(RAW_CSV_PATH)
+    return run_stage6_split(df)
 
 
-def test_dashboard_renders_without_error(live_api_server, monkeypatch):
-    monkeypatch.setenv("RETENTIONAI_API_URL", live_api_server)
-    at = AppTest.from_file(DASHBOARD_APP_PATH)
-    at.run(timeout=30)
-    assert not list(at.exception)
+def test_precision_at_k_perfect_ranking_gives_perfect_precision():
+    y_true = np.array([1, 1, 1, 0, 0, 0])
+    y_score = np.array([0.9, 0.8, 0.7, 0.3, 0.2, 0.1])  # churners ranked highest
+    assert precision_at_k(y_true, y_score, k=3) == 1.0
 
 
-def test_dashboard_predict_button_populates_metrics(live_api_server, monkeypatch):
-    monkeypatch.setenv("RETENTIONAI_API_URL", live_api_server)
-    at = AppTest.from_file(DASHBOARD_APP_PATH)
-    at.run(timeout=30)
-
-    predict_btn = [b for b in at.button if b.label == "Predict churn risk"][0]
-    predict_btn.click().run(timeout=30)
-
-    assert not list(at.exception)
-    metrics = {m.label: m.value for m in at.metric}
-    assert "Calibrated churn probability" in metrics
-    assert metrics["Calibrated churn probability"].endswith("%")
-    assert "Recommended offer (Thompson Sampling)" in metrics
+def test_precision_at_k_worst_ranking_gives_zero_precision():
+    y_true = np.array([1, 1, 1, 0, 0, 0])
+    y_score = np.array([0.1, 0.2, 0.3, 0.7, 0.8, 0.9])  # churners ranked lowest
+    assert precision_at_k(y_true, y_score, k=3) == 0.0
 
 
-def test_dashboard_counterfactual_check_handles_the_known_ambiguity(live_api_server, monkeypatch):
-    """ADR-014 Decision Point 4's raw_changes:{}/flippable:true ambiguity
-    must render as a distinct, sensible message -- not crash, not show
-    nothing."""
-    monkeypatch.setenv("RETENTIONAI_API_URL", live_api_server)
-    at = AppTest.from_file(DASHBOARD_APP_PATH)
-    at.run(timeout=30)
-
-    predict_btn = [b for b in at.button if b.label == "Predict churn risk"][0]
-    predict_btn.click().run(timeout=30)
-
-    cf_btn = [b for b in at.button if b.label == "Check for a counterfactual"][0]
-    cf_btn.click().run(timeout=30)
-
-    assert not list(at.exception)
-    # One of the three known UI outcomes must have rendered
-    rendered = list(at.success) + list(at.info) + list(at.warning)
-    assert len(rendered) > 0
+def test_recall_at_k_captures_all_positives_when_k_covers_them():
+    y_true = np.array([1, 0, 1, 0, 1])
+    y_score = np.array([0.9, 0.1, 0.8, 0.05, 0.7])
+    assert recall_at_k(y_true, y_score, k=3) == 1.0
 
 
-def test_dashboard_feedback_button_reports_success(live_api_server, monkeypatch):
-    monkeypatch.setenv("RETENTIONAI_API_URL", live_api_server)
-    at = AppTest.from_file(DASHBOARD_APP_PATH)
-    at.run(timeout=30)
-
-    predict_btn = [b for b in at.button if b.label == "Predict churn risk"][0]
-    predict_btn.click().run(timeout=30)
-
-    fb_btn = [b for b in at.button if b.label == "Yes, retained"][0]
-    fb_btn.click().run(timeout=30)
-
-    assert not list(at.exception)
-    assert any("Feedback recorded" in el.value for el in at.success)
+def test_baseline_trains_and_predicts_valid_probabilities(split_data):
+    X_train, X_test, y_train, y_test, _ = split_data
+    model = train_logistic_regression(X_train, y_train)
+    proba = model.predict_proba(X_test)[:, 1]
+    assert proba.shape[0] == len(X_test)
+    assert (proba >= 0).all() and (proba <= 1).all()
 
 
-def test_dashboard_shows_error_when_api_unreachable(monkeypatch):
-    monkeypatch.setenv("RETENTIONAI_API_URL", "http://127.0.0.1:9999")  # nothing listening here
-    at = AppTest.from_file(DASHBOARD_APP_PATH)
-    at.run(timeout=30)
+def test_champion_trains_and_predicts_valid_probabilities(split_data):
+    X_train, X_test, y_train, y_test, _ = split_data
+    model = train_xgboost(X_train, y_train)
+    proba = model.predict_proba(X_test)[:, 1]
+    assert proba.shape[0] == len(X_test)
+    assert (proba >= 0).all() and (proba <= 1).all()
 
-    predict_btn = [b for b in at.button if b.label == "Predict churn risk"][0]
-    predict_btn.click().run(timeout=30)
 
-    assert not list(at.exception)  # the app itself shouldn't crash
-    assert len(list(at.error)) > 0  # it should show a real error to the user
+def test_champion_does_not_use_is_new_customer_or_total_addon_services(split_data):
+    """Both were rejected in ADR-006 -- the champion model must never be
+    trained on either, regardless of what any other stage assumes."""
+    X_train, _, _, _, _ = split_data
+    assert "IsNewCustomer" not in X_train.columns
+    assert "TotalAddOnServices" not in X_train.columns

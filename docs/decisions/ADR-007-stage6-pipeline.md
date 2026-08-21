@@ -69,9 +69,13 @@ drop on the real dataset, cross-checked against Stage 5's IV ranking.
 **Reasoning:** If VIF's survivor also has the highest standalone IV among
 the three, that's corroborating evidence, not coincidence — the column
 carrying the most real predictive signal is the one worth keeping when a
-redundant group must be trimmed down.
-[Fill in once run on real data: which column survived, its final VIF, and
-whether it matches the highest-IV column of the three from Stage 5.]
+redundant group must be trimmed down.  
+**Result (real data):** `tenure` survived the iterative VIF filtering with
+a final VIF of 6.98. This agrees with Stage 5's IV ranking: among
+`tenure`, `MonthlyCharges`, and `TotalCharges`, `tenure` had the highest
+IV at 0.7596. The VIF survivor therefore also carried the strongest
+standalone predictive signal of the three, corroborating the decision to
+retain it when resolving the multicollinearity group.
 
 ## Decision Point 6 — No resampling, no calibration split, yet
 **Decision:** This pipeline produces a plain train/test split with no

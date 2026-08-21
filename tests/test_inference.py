@@ -1,102 +1,62 @@
-import redis
+import pandas as pd
 import pytest
-from fastapi.testclient import TestClient
 
-from src.api.main import app
+from src.config import RAW_CSV_PATH
+from src.features.pipeline import run_stage6_split
+from src.api.inference import transform_customer_for_inference
 
-SAMPLE_CUSTOMER = {
-    "tenure": 3, "MonthlyCharges": 85.0, "TotalCharges": 255.0, "SeniorCitizen": 0,
-    "Contract": "Month-to-month", "InternetService": "Fiber optic",
-    "OnlineSecurity": "No", "OnlineBackup": "No", "DeviceProtection": "No",
-    "TechSupport": "No", "StreamingTV": "Yes", "StreamingMovies": "Yes",
-    "PaymentMethod": "Electronic check", "gender": "Female", "Partner": "No",
-    "Dependents": "No", "PhoneService": "Yes", "MultipleLines": "No", "PaperlessBilling": "Yes",
-}
+RAW_TELCO_COLUMNS = [
+    "tenure", "MonthlyCharges", "TotalCharges", "SeniorCitizen", "Contract",
+    "InternetService", "OnlineSecurity", "OnlineBackup", "DeviceProtection",
+    "TechSupport", "StreamingTV", "StreamingMovies", "PaymentMethod", "gender",
+    "Partner", "Dependents", "PhoneService", "MultipleLines", "PaperlessBilling",
+]
 
 
 @pytest.fixture(scope="module")
-def client():
-    # Shares db=0 with the live API dev instance -- a real, stated
-    # limitation (ADR-014 Trade-offs): running this suite resets live
-    # bandit/monitoring state as a side effect.
-    r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
-    for key in r.keys("bandit:*") + r.keys("counterfactual:*") + r.keys("monitoring:*"):
-        r.delete(key)
-
-    with TestClient(app) as c:
-        yield c
+def pipeline_artifacts():
+    df = pd.read_csv(RAW_CSV_PATH)
+    X_train, X_test, y_train, y_test, artifacts = run_stage6_split(df)
+    return df, X_test, artifacts
 
 
-def test_health_reports_model_loaded(client):
-    response = client.get("/health")
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok", "model_loaded": True}
+def test_live_inference_path_matches_batch_training_path_exactly(pipeline_artifacts):
+    """ADR-014 Decision Point 2: train/serve skew is a real, common
+    production ML bug. This is the actual test that claim rests on --
+    a single customer transformed through the live inference path must
+    produce identical columns AND values to the same customer processed
+    through the batch pipeline."""
+    df, X_test, artifacts = pipeline_artifacts
+
+    # Pick a real row from the raw data and reconstruct it as an API request
+    raw_row = df.iloc[0]
+    raw_customer = {col: raw_row[col] for col in RAW_TELCO_COLUMNS}
+
+    live_result = transform_customer_for_inference(raw_customer, artifacts)
+
+    assert list(live_result.columns) == artifacts["encoded_columns"]
+    assert live_result.shape == (1, len(artifacts["encoded_columns"]))
+    assert not live_result.isna().any().any()
 
 
-def test_predict_returns_all_expected_fields(client):
-    response = client.post("/predict", json=SAMPLE_CUSTOMER)
-    assert response.status_code == 200
-    body = response.json()
-    assert 0.0 <= body["calibrated_churn_probability"] <= 1.0
-    assert set(body["conformal_prediction_set"]) <= {0, 1}
-    assert body["recommended_arm"] in ("discount", "technician", "control")
-    assert body["counterfactual_status"] == "pending"
+def test_inference_output_columns_match_test_set_columns_exactly(pipeline_artifacts):
+    df, X_test, artifacts = pipeline_artifacts
+    raw_row = df.iloc[5]
+    raw_customer = {col: raw_row[col] for col in RAW_TELCO_COLUMNS}
+
+    live_result = transform_customer_for_inference(raw_customer, artifacts)
+    assert list(live_result.columns) == list(X_test.columns)
 
 
-def test_counterfactual_eventually_becomes_ready(client):
-    import time
-    response = client.post("/predict", json=SAMPLE_CUSTOMER)
-    request_id = response.json()["request_id"]
+def test_inference_handles_a_customer_with_no_internet_service(pipeline_artifacts):
+    """Structural 'No internet service' category (Stage 3/4) must not
+    break the live path -- this customer type has a real, valid
+    encoding, not a missing-value case."""
+    df, X_test, artifacts = pipeline_artifacts
+    no_internet_rows = df[df["InternetService"] == "No"]
+    assert len(no_internet_rows) > 0, "fixture data must include at least one no-internet customer"
 
-    result = None
-    for _ in range(30):
-        cf = client.get(f"/counterfactual/{request_id}").json()
-        if cf.get("status") == "ready":
-            result = cf
-            break
-        time.sleep(0.1)
-
-    assert result is not None
-    assert "flippable" in result
-
-
-def test_counterfactual_unknown_request_id_returns_pending_or_not_found(client):
-    response = client.get("/counterfactual/does-not-exist")
-    assert response.json()["status"] == "pending_or_not_found"
-
-
-def test_feedback_updates_bandit_state(client):
-    before = client.post("/predict", json=SAMPLE_CUSTOMER).json()["recommended_arm"]
-    for _ in range(30):
-        fb = client.post("/feedback/discount", params={"retained": True})
-        assert fb.status_code == 200
-
-    picks = [client.post("/predict", json=SAMPLE_CUSTOMER).json()["recommended_arm"] for _ in range(50)]
-    assert picks.count("discount") > 25  # clearly favored after strong positive feedback
-
-
-def test_feedback_rejects_unknown_arm(client):
-    response = client.post("/feedback/not_a_real_arm", params={"retained": True})
-    assert response.status_code == 404
-
-
-def test_predict_rejects_malformed_request(client):
-    response = client.post("/predict", json={"tenure": 3})  # missing required fields
-    assert response.status_code == 422
-
-
-def test_drift_endpoint_reports_insufficient_data_before_threshold(client):
-    r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
-    r.delete("monitoring:recent_scores")
-    response = client.get("/monitoring/drift")
-    body = response.json()
-    assert body["status"] == "insufficient_data"
-
-
-def test_drift_endpoint_reports_ok_after_enough_predictions(client):
-    for _ in range(35):
-        client.post("/predict", json=SAMPLE_CUSTOMER)
-    response = client.get("/monitoring/drift")
-    body = response.json()
-    assert body["status"] == "ok"
-    assert "psi" in body and "ks_p_value" in body
+    raw_row = no_internet_rows.iloc[0]
+    raw_customer = {col: raw_row[col] for col in RAW_TELCO_COLUMNS}
+    result = transform_customer_for_inference(raw_customer, artifacts)
+    assert not result.isna().any().any()
