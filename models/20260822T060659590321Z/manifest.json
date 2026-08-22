@@ -1,0 +1,43 @@
+{
+  "manifest_schema_version": 3,
+  "version": "20260822T060659590321Z",
+  "created_at": "2026-08-22T06:06:59.603213+00:00",
+  "feature_schema_sha256": "634d73ce76e683ce6896b161cdc050aed8cb5897aaa79d4a063e7d1998f54dc9",
+  "training_data": {
+    "dataset_kind": "telco_kaggle_snapshot",
+    "row_count": 7043,
+    "sha256": "88be4b93fbe0cc83421af1c503794c97c342eca914c1576db7c276e61d61358a"
+  },
+  "files": [
+    {
+      "name": "calibrated_model.joblib",
+      "bytes": 341140,
+      "sha256": "99dfffa950bd47de04540f56926adf67ff016b30ada316f0c170863b1c7519bf"
+    },
+    {
+      "name": "conformal_thresholds.joblib",
+      "bytes": 38,
+      "sha256": "d12d1931ef9df32207d8fc6a9753828519380fcaabc318228aace43fac711924"
+    },
+    {
+      "name": "evaluation.json",
+      "bytes": 2409,
+      "sha256": "36b2a46deb1a221e3e8f44429f66b85990abdc8164623f3a694d15cb9c0df0c7"
+    },
+    {
+      "name": "model.joblib",
+      "bytes": 337215,
+      "sha256": "0be2e5df5416845b709e1be9cce0c02c56665f3d83fd0efa4a0f749a6729bacf"
+    },
+    {
+      "name": "pipeline_artifacts.joblib",
+      "bytes": 5584,
+      "sha256": "a3e39b3829e9a92c40e1cec8f4944563f6a5836546006f88275a440db8308a6d"
+    },
+    {
+      "name": "reference_scores.joblib",
+      "bytes": 5857,
+      "sha256": "9645e40f90b85d3321c3637a5a91d7aeab3bcc5040cc8dbd3ce611901c13f4de"
+    }
+  ]
+}

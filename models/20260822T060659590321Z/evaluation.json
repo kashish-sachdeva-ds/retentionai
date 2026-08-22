@@ -1,0 +1,81 @@
+{
+  "calibration": {
+    "brier_score": 0.14524469373912705,
+    "ece_10_bins": 0.055572465811420765
+  },
+  "conformal": {
+    "average_prediction_set_size": 1.660056657223796,
+    "class_conditional_coverage": {
+      "0": {
+        "empirical_coverage": 0.9575289575289575,
+        "n_examples": 259
+      },
+      "1": {
+        "empirical_coverage": 1.0,
+        "n_examples": 94
+      }
+    },
+    "target_coverage": 0.95
+  },
+  "decision_policy": {
+    "churn_probability_threshold": 0.08333333333333333,
+    "note": "Operational prioritization remains capacity-constrained ranking, not this threshold alone."
+  },
+  "evaluation_schema_version": 1,
+  "holdout_protocol": "Model fit on train; isotonic calibration fit on calibration; Mondrian thresholds fit on a disjoint conformal split; metrics below are computed only on the remaining holdout split.",
+  "limitations": [
+    "Intervals reflect sampling uncertainty in one static holdout, not future-population performance.",
+    "Slice results are diagnostic only; they do not establish fairness or causal validity.",
+    "Churn propensity is not treatment uplift or offer effectiveness."
+  ],
+  "ranking": {
+    "decision_k": 100,
+    "pr_auc": 0.6192472947607406,
+    "pr_auc_95pct_bootstrap_ci": [
+      0.5413688799995403,
+      0.717700295195454
+    ],
+    "precision_at_k": 0.57,
+    "recall_at_k": 0.6063829787234043
+  },
+  "slices": {
+    "SeniorCitizen": [
+      {
+        "brier_score": 0.1394684185194658,
+        "churn_rate": 0.22525597269624573,
+        "n_examples": 293,
+        "pr_auc": 0.5450300595536207,
+        "value": "0"
+      },
+      {
+        "brier_score": 0.17345217106180624,
+        "churn_rate": 0.4666666666666667,
+        "n_examples": 60,
+        "pr_auc": 0.7875433779119189,
+        "value": "1"
+      }
+    ],
+    "gender": [
+      {
+        "brier_score": 0.13974538265957756,
+        "churn_rate": 0.30601092896174864,
+        "n_examples": 183,
+        "pr_auc": 0.7527143409975214,
+        "value": "Female"
+      },
+      {
+        "brier_score": 0.15116454037181856,
+        "churn_rate": 0.2235294117647059,
+        "n_examples": 170,
+        "pr_auc": 0.4728794254678967,
+        "value": "Male"
+      }
+    ]
+  },
+  "split_counts": {
+    "calibration": 704,
+    "conformal": 352,
+    "holdout": 353,
+    "train": 5634
+  }
+}

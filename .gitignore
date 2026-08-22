@@ -13,6 +13,8 @@ data/*.csv
 
 models/*
 !models/README.md
+!models/latest_version.txt
+!models/20260822T060659590321Z/
 
 *.egg-info/
 
