@@ -230,11 +230,11 @@ app = FastAPI(
 # Versioned API router — all domain endpoints live under /api/v1
 v1 = APIRouter(prefix="/api/v1")
 
-# CORS Middleware — allow configured origins plus any *.onrender.com deployment domain
+# CORS Middleware — allow configured origins plus any *.onrender.com and *.vercel.app deployment domain
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_origin_regex=r"https://.*\.onrender\.com|http://localhost:\d+|http://127\.0\.0\.1:\d+",
+    allow_origin_regex=r"https://.*\.onrender\.com|https://.*\.vercel\.app|http://localhost:\d+|http://127\.0\.0\.1:\d+",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
