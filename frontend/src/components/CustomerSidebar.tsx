@@ -24,7 +24,7 @@ interface CustomerSidebarProps {
 export const PRESET_PROFILES: CustomerProfile[] = [
   {
     id: 'atRisk',
-    name: 'Sarah Connor (New & At-Risk)',
+    name: 'ACCT-7892 • At-Risk New Subscriber',
     category: 'preset',
     riskTier: 'critical',
     riskScore: 0.95,
@@ -34,7 +34,7 @@ export const PRESET_PROFILES: CustomerProfile[] = [
   },
   {
     id: 'borderline',
-    name: 'Marcus Brody (Borderline Mid-Tenure)',
+    name: 'ACCT-4410 • Borderline Mid-Tenure Account',
     category: 'preset',
     riskTier: 'moderate',
     riskScore: 0.42,
@@ -44,7 +44,7 @@ export const PRESET_PROFILES: CustomerProfile[] = [
   },
   {
     id: 'loyal',
-    name: 'Elena Rostova (Loyal Multi-Service)',
+    name: 'ACCT-1205 • Loyal Multi-Service Account',
     category: 'preset',
     riskTier: 'low',
     riskScore: 0.03,
