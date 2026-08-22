@@ -37,7 +37,4 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_BASE_URL
-        fromService:
-          type: web
-          name: retentionai-api
-          property: host
+        value: "https://retentionai-api.onrender.com"
