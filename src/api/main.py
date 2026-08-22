@@ -227,6 +227,16 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+# Root health endpoint for container health probes and reverse proxies
+@app.get("/health", tags=["Operations"], summary="Root health check")
+def root_health():
+    """Returns model load status and the SHA-256 version of the serving artifact."""
+    return {
+        "status": "ok",
+        "model_loaded": state.model is not None,
+        "model_version": state.model_version,
+    }
+
 # Versioned API router — all domain endpoints live under /api/v1
 v1 = APIRouter(prefix="/api/v1")
 
