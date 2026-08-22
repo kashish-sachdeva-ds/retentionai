@@ -2,7 +2,13 @@ import numpy as np
 import pytest
 import redis
 
-from src.api.redis_bandit import select_arm_redis, update_arm_redis, get_arm_posterior
+from src.api.redis_bandit import (
+    get_arm_posterior,
+    record_feedback_once,
+    record_prediction_assignment,
+    select_arm_redis,
+    update_arm_redis,
+)
 
 TEST_DB = 15  # isolated from db=0, which the live API and its dev instance use
 
@@ -46,3 +52,25 @@ def test_initialization_is_atomic_does_not_reset_on_repeated_calls(redis_client)
     get_arm_posterior(redis_client, "discount")  # would re-trigger init if hsetnx were broken
     alpha, beta = get_arm_posterior(redis_client, "discount")
     assert (alpha, beta) == (2.0, 1.0)
+
+
+def test_feedback_transaction_updates_only_the_assigned_arm_once(redis_client):
+    request_id = "attributed-request"
+    record_prediction_assignment(redis_client, request_id, "discount", "test-model")
+
+    assert record_feedback_once(redis_client, request_id, "discount", retained=True) == "recorded"
+    assert get_arm_posterior(redis_client, "discount") == (2.0, 1.0)
+    assert record_feedback_once(redis_client, request_id, "discount", retained=True) == "duplicate"
+    assert get_arm_posterior(redis_client, "discount") == (2.0, 1.0)
+
+
+def test_feedback_transaction_rejects_unknown_or_mismatched_assignment(redis_client):
+    assert record_feedback_once(redis_client, "missing", "discount", retained=True) == "unknown_prediction"
+
+    record_prediction_assignment(redis_client, "discount-assignment", "discount", "test-model")
+    assert (
+        record_feedback_once(redis_client, "discount-assignment", "control", retained=True)
+        == "arm_mismatch"
+    )
+    assert get_arm_posterior(redis_client, "discount") == (1.0, 1.0)
+    assert get_arm_posterior(redis_client, "control") == (1.0, 1.0)

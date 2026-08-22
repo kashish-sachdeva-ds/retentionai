@@ -28,8 +28,8 @@ def test_live_inference_path_matches_batch_training_path_exactly(pipeline_artifa
     through the batch pipeline."""
     df, X_test, artifacts = pipeline_artifacts
 
-    # Pick a real row from the raw data and reconstruct it as an API request
-    raw_row = df.iloc[0]
+    # Pick a real row from the test set and reconstruct it as an API request
+    raw_row = df.loc[X_test.index[0]]
     raw_customer = {col: raw_row[col] for col in RAW_TELCO_COLUMNS}
 
     live_result = transform_customer_for_inference(raw_customer, artifacts)
@@ -37,6 +37,18 @@ def test_live_inference_path_matches_batch_training_path_exactly(pipeline_artifa
     assert list(live_result.columns) == artifacts["encoded_columns"]
     assert live_result.shape == (1, len(artifacts["encoded_columns"]))
     assert not live_result.isna().any().any()
+
+    # Post-audit fix (Blocker 9): actually check numerical equality, not
+    # just structural properties. The batch pipeline produces the same
+    # customer's row in X_test -- compare values to substantiate the
+    # "identical" claim the docstring makes.
+    batch_row = X_test.loc[[raw_row.name]]
+    pd.testing.assert_frame_equal(
+        live_result.reset_index(drop=True),
+        batch_row.reset_index(drop=True),
+        check_names=False,
+        atol=1e-10,
+    )
 
 
 def test_inference_output_columns_match_test_set_columns_exactly(pipeline_artifacts):

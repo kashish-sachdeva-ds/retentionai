@@ -32,7 +32,7 @@ def live_api_server():
     for _ in range(60):
         try:
             import requests
-            requests.get("http://127.0.0.1:8001/health", timeout=1)
+            requests.get("http://127.0.0.1:8001/api/v1/health", timeout=1)
             break
         except Exception:
             time.sleep(0.5)
@@ -46,21 +46,27 @@ def test_dashboard_renders_without_error(live_api_server, monkeypatch):
     at = AppTest.from_file(DASHBOARD_APP_PATH)
     at.run(timeout=30)
     assert not list(at.exception)
+    # Verify the header disclosure line rendered
+    all_markdown = " ".join(m.value for m in at.markdown)
+    assert "Portfolio demonstration" in all_markdown
 
 
-def test_dashboard_predict_button_populates_metrics(live_api_server, monkeypatch):
+def test_dashboard_predict_button_populates_results(live_api_server, monkeypatch):
     monkeypatch.setenv("RETENTIONAI_API_URL", live_api_server)
     at = AppTest.from_file(DASHBOARD_APP_PATH)
     at.run(timeout=30)
 
-    predict_btn = [b for b in at.button if b.label == "Predict churn risk"][0]
+    predict_btn = [b for b in at.button if b.label == "Assess churn risk"][0]
     predict_btn.click().run(timeout=30)
 
     assert not list(at.exception)
-    metrics = {m.label: m.value for m in at.metric}
-    assert "Calibrated churn probability" in metrics
-    assert metrics["Calibrated churn probability"].endswith("%")
-    assert "Recommended offer (Thompson Sampling)" in metrics
+    # The redesigned dashboard renders risk scores via st.markdown, not
+    # st.metric. Verify the markdown output contains a percentage and
+    # the review-priority caption mentions the policy arm.
+    all_markdown = " ".join(m.value for m in at.markdown)
+    assert "%" in all_markdown
+    all_captions = " ".join(c.value for c in at.caption)
+    assert "policy arm" in all_captions.lower()
 
 
 def test_dashboard_counterfactual_check_handles_the_known_ambiguity(live_api_server, monkeypatch):
@@ -71,10 +77,10 @@ def test_dashboard_counterfactual_check_handles_the_known_ambiguity(live_api_ser
     at = AppTest.from_file(DASHBOARD_APP_PATH)
     at.run(timeout=30)
 
-    predict_btn = [b for b in at.button if b.label == "Predict churn risk"][0]
+    predict_btn = [b for b in at.button if b.label == "Assess churn risk"][0]
     predict_btn.click().run(timeout=30)
 
-    cf_btn = [b for b in at.button if b.label == "Check for a counterfactual"][0]
+    cf_btn = [b for b in at.button if b.label == "Check for a scenario"][0]
     cf_btn.click().run(timeout=30)
 
     assert not list(at.exception)
@@ -88,14 +94,16 @@ def test_dashboard_feedback_button_reports_success(live_api_server, monkeypatch)
     at = AppTest.from_file(DASHBOARD_APP_PATH)
     at.run(timeout=30)
 
-    predict_btn = [b for b in at.button if b.label == "Predict churn risk"][0]
+    predict_btn = [b for b in at.button if b.label == "Assess churn risk"][0]
     predict_btn.click().run(timeout=30)
 
-    fb_btn = [b for b in at.button if b.label == "Yes, retained"][0]
+    fb_btn = [b for b in at.button if b.label == "Retained"][0]
     fb_btn.click().run(timeout=30)
 
     assert not list(at.exception)
-    assert any("Feedback recorded" in el.value for el in at.success)
+    # Either "Feedback recorded" (success) or "already recorded" (warning/idempotency)
+    assert any("Feedback recorded" in el.value for el in at.success) or \
+           any("already recorded" in el.value for el in at.warning)
 
 
 def test_dashboard_shows_error_when_api_unreachable(monkeypatch):
@@ -103,7 +111,7 @@ def test_dashboard_shows_error_when_api_unreachable(monkeypatch):
     at = AppTest.from_file(DASHBOARD_APP_PATH)
     at.run(timeout=30)
 
-    predict_btn = [b for b in at.button if b.label == "Predict churn risk"][0]
+    predict_btn = [b for b in at.button if b.label == "Assess churn risk"][0]
     predict_btn.click().run(timeout=30)
 
     assert not list(at.exception)  # the app itself shouldn't crash

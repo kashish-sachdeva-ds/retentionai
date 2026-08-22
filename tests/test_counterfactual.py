@@ -5,6 +5,7 @@ import pytest
 from src.config import RAW_CSV_PATH
 from src.features.pipeline import run_stage6_split
 from src.modeling.champion import train_xgboost
+from src.modeling.calibration import calibrate_model
 from src.explain.counterfactual import find_counterfactual, ACTIONABLE_GRIDS, UPGRADE_ONLY_FEATURES
 
 
@@ -76,3 +77,51 @@ def test_find_counterfactual_returns_none_when_grid_cannot_flip(trained_model_an
     # result exists, it made no further upgrades beyond max.
     if result is not None:
         assert result["raw_changes"] == {}
+
+
+def test_counterfactual_uses_calibrated_threshold(trained_model_and_data):
+    """Post-audit fix (Blocker 2): the counterfactual should use the same
+    decision boundary as the calibrated prediction, not the raw model's
+    default 0.5. Verify that a counterfactual found with the calibrated
+    model + ADR-002 threshold (0.083) actually flips the prediction
+    under that threshold."""
+    model, X_test, artifacts = trained_model_and_data
+    scaler = artifacts["scaler"]
+    scaled_columns = artifacts["encoded_columns"]
+    X_test_raw = pd.DataFrame(scaler.inverse_transform(X_test), columns=scaled_columns, index=X_test.index)
+
+    from sklearn.model_selection import train_test_split
+    df = pd.read_csv(RAW_CSV_PATH)
+    _, X_test_full, _, y_test_full, _ = run_stage6_split(df)
+    X_calib, _, y_calib, _ = train_test_split(
+        X_test_full, y_test_full, test_size=0.5, random_state=7, stratify=y_test_full
+    )
+    cal_model = calibrate_model(model, X_calib, y_calib, method="isotonic")
+
+    threshold = 70.0 / 840.0  # ADR-002 cost-sensitive threshold
+    preds = model.predict(X_test)
+    churner_idx = np.where(preds == 1)[0][:5]
+
+    for idx in churner_idx:
+        raw_full = X_test_raw.iloc[idx]
+        raw = {f: round(raw_full[f]) for f in ACTIONABLE_GRIDS}
+        for f, grid in ACTIONABLE_GRIDS.items():
+            raw[f] = min(grid, key=lambda x: abs(x - raw[f]))
+
+        result = find_counterfactual(
+            cal_model, X_test.iloc[idx], raw, scaler, scaled_columns,
+            desired_class=0, threshold=threshold,
+        )
+        if result is not None:
+            # Verify the flip actually holds under the calibrated model
+            candidate_input = X_test.iloc[idx].copy()
+            for f, v in result["candidate_raw"].items():
+                col_idx = scaled_columns.index(f)
+                dummy_row = pd.DataFrame(
+                    np.zeros((1, len(scaled_columns))), columns=scaled_columns
+                )
+                dummy_row.iloc[0, col_idx] = v
+                scaled_value = scaler.transform(dummy_row)[0, col_idx]
+                candidate_input[f] = scaled_value
+            prob = cal_model.predict_proba(pd.DataFrame([candidate_input]))[0, 1]
+            assert prob < threshold
