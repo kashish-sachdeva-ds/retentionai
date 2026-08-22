@@ -35,12 +35,9 @@ export function TopHeader({
             <span className="text-xs font-black tracking-widest text-indigo-700 uppercase">
               RetentionAI
             </span>
-            <span className="hidden rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700 border border-indigo-200/60 sm:inline-block">
-              ML System
-            </span>
           </div>
           <p className="hidden text-[11px] text-slate-500 sm:block font-medium">
-            Calibrated Customer Churn Prioritization &amp; Conformal Uncertainty
+            Churn-prioritization decision support for a constrained call budget
           </p>
         </div>
       </div>
@@ -67,7 +64,7 @@ export function TopHeader({
             }`}
           />
           <span className="text-[11px]">
-            {online ? 'API Serving' : healthError ? 'Service Offline' : 'Connecting...'}
+            {online ? 'API ready' : healthError ? 'API unavailable' : 'Connecting...'}
           </span>
         </div>
 

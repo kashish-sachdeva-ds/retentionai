@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { CheckCircle2 } from 'lucide-react';
-import { getHealth, submitFeedback } from './api';
+import { getHealth } from './api';
 import { Sidebar } from './components/Sidebar';
 import { TopHeader } from './components/TopHeader';
 import { HomePage } from './pages/HomePage';
@@ -17,7 +17,6 @@ export default function App() {
   const [healthError, setHealthError] = useState<string | null>(null);
   const [healthLoading, setHealthLoading] = useState(false);
   const [assessments, setAssessments] = useState<ScoredAssessment[]>([]);
-  const [feedbackRequestId, setFeedbackRequestId] = useState<string | null>(null);
 
   const refreshHealth = useCallback(async () => {
     setHealthLoading(true);
@@ -50,25 +49,6 @@ export default function App() {
     setAssessments((current) => [{ response, payload, createdAt: new Date() }, ...current]);
     setToastMessage(`Live prediction created with the ${response.recommended_arm} policy arm.`);
     void refreshHealth();
-  };
-
-  const handleFeedback = async (assessment: ScoredAssessment, retained: boolean) => {
-    setFeedbackRequestId(assessment.response.request_id);
-    try {
-      await submitFeedback(assessment.response.request_id, assessment.response.recommended_arm, retained);
-      setAssessments((current) =>
-        current.map((item) =>
-          item.response.request_id === assessment.response.request_id
-            ? { ...item, feedback: { retained, recordedAt: new Date() } }
-            : item
-        )
-      );
-      setToastMessage(`Outcome recorded: customer ${retained ? 'retained' : 'churned'}. The bandit posterior is updated.`);
-    } catch (error) {
-      setToastMessage(error instanceof Error ? error.message : 'Unable to record feedback.');
-    } finally {
-      setFeedbackRequestId(null);
-    }
   };
 
   return (
@@ -122,9 +102,6 @@ export default function App() {
               element={
                 <RiskAssessmentPage
                   onPrediction={handlePrediction}
-                  assessments={assessments}
-                  onRecordFeedback={(assessment, retained) => void handleFeedback(assessment, retained)}
-                  feedbackRequestId={feedbackRequestId}
                 />
               }
             />

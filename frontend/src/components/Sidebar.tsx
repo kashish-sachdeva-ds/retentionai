@@ -4,7 +4,6 @@ import {
   Sparkles,
   BarChart3,
   Info,
-  Layers,
   X,
   BookOpen,
   Code2,
@@ -119,11 +118,11 @@ export function Sidebar({ isOpen, onClose, health }: SidebarProps) {
           </a>
         </div>
 
-        {/* Engine Pipeline Status Card */}
+        {/* Serving status */}
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-              <Layers className="w-3.5 h-3.5 text-indigo-600" /> Pipeline Status
+              Model service
             </span>
             <span className="flex h-2 w-2 relative">
               {health?.model_loaded ? (
@@ -137,18 +136,14 @@ export function Sidebar({ isOpen, onClose, health }: SidebarProps) {
             </span>
           </div>
 
-          <div className="text-[11px] text-slate-600 space-y-1 pt-1 font-mono">
+          <div className="text-[11px] text-slate-600 space-y-1 pt-1">
             <div className="flex justify-between">
-              <span className="text-slate-500">Model:</span>
-              <strong className="text-slate-800">XGBoost + Calib</strong>
+              <span className="text-slate-500">Status:</span>
+              <strong className={health?.model_loaded ? 'text-emerald-700' : 'text-amber-700'}>{health?.model_loaded ? 'Ready' : 'Unavailable'}</strong>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">Holdout PR-AUC:</span>
-              <strong className="text-indigo-600">0.6466</strong>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">Coverage (95%):</span>
-              <strong className="text-emerald-600">Verified</strong>
+              <span className="text-slate-500">Artifact:</span>
+              <strong className="max-w-[120px] truncate font-mono text-slate-700" title={health?.model_version ?? undefined}>{health?.model_version ? health.model_version.slice(0, 12) : '—'}</strong>
             </div>
           </div>
         </div>

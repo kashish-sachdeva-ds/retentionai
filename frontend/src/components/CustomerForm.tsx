@@ -163,6 +163,7 @@ interface CustomerFormProps {
   onSelectPreset: (presetKey: string) => void;
   activePreset: string | null;
   disabled?: boolean;
+  showPresetPicker?: boolean;
 }
 
 export const CustomerForm: React.FC<CustomerFormProps> = ({
@@ -171,6 +172,7 @@ export const CustomerForm: React.FC<CustomerFormProps> = ({
   onSelectPreset,
   activePreset,
   disabled = false,
+  showPresetPicker = true,
 }) => {
   const setField = <K extends keyof PredictionPayload>(key: K, value: PredictionPayload[K]) => {
     onChange({ ...formData, [key]: value });
@@ -212,7 +214,7 @@ export const CustomerForm: React.FC<CustomerFormProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* 1. ARCHETYPE PRESET SELECTOR */}
+      {showPresetPicker && (
       <div className="space-y-2.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -282,6 +284,7 @@ export const CustomerForm: React.FC<CustomerFormProps> = ({
           })}
         </div>
       </div>
+      )}
 
       {/* 2. ACCOUNT & CORE FINANCIAL SERVICES */}
       <div className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-xs space-y-4">

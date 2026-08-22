@@ -7,14 +7,13 @@ import {
   Activity,
   AlertTriangle,
 } from 'lucide-react';
-import { getModelCard, getBanditPosteriors, getDrift, ApiError } from '../api';
+import { getModelCard, getDrift, ApiError } from '../api';
 import { LoadingState } from '../components/LoadingState';
 import { ErrorBanner } from '../components/ErrorBanner';
-import type { ModelCardResponse, BanditPosteriorResponse, DriftResponse } from '../types';
+import type { ModelCardResponse, DriftResponse } from '../types';
 
 export const ModelEvidencePage: React.FC = () => {
   const [modelCard, setModelCard] = useState<ModelCardResponse | null>(null);
-  const [banditPosteriors, setBanditPosteriors] = useState<BanditPosteriorResponse | null>(null);
   const [driftData, setDriftData] = useState<DriftResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [driftLoading, setDriftLoading] = useState(false);
@@ -24,12 +23,8 @@ export const ModelEvidencePage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const [card, posteriors] = await Promise.all([
-        getModelCard(),
-        getBanditPosteriors().catch(() => null),
-      ]);
+      const card = await getModelCard();
       setModelCard(card);
-      setBanditPosteriors(posteriors);
     } catch (err) {
       setError(
         err instanceof ApiError
@@ -91,7 +86,7 @@ export const ModelEvidencePage: React.FC = () => {
             )}
           </div>
           <p className="mt-1 text-sm text-slate-500">
-            Immutable holdout evaluation metrics attached to the active artifact (
+            Holdout evaluation attached to the active serving artifact (
             <span className="font-mono font-semibold text-slate-700">
               {modelCard?.model_version || 'Unknown Version'}
             </span>
@@ -124,14 +119,14 @@ export const ModelEvidencePage: React.FC = () => {
           <p className="mt-1 text-xs text-slate-400">
             {ranking?.pr_auc_ci_lower !== undefined && ranking?.pr_auc_ci_upper !== undefined
               ? `95% CI: [${ranking.pr_auc_ci_lower.toFixed(3)}, ${ranking.pr_auc_ci_upper.toFixed(3)}]`
-              : 'Primary evaluation benchmark'}
+              : 'Interval unavailable from the serving model card'}
           </p>
         </article>
 
         {/* Precision@K */}
         <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
           <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-bold uppercase tracking-wider">Precision @ {ranking?.k ?? 100}</span>
+            <span className="text-xs font-bold uppercase tracking-wider">Precision @ {ranking?.k ?? 'K'}</span>
             <Target className="h-4 w-4 text-emerald-600" />
           </div>
           <p className="mt-3 text-3xl font-extrabold tracking-tight text-emerald-600">
@@ -140,7 +135,7 @@ export const ModelEvidencePage: React.FC = () => {
               : '—'}
           </p>
           <p className="mt-1 text-xs text-slate-400">
-            Recall @ {ranking?.k ?? 100}:{' '}
+            Recall @ {ranking?.k ?? 'K'}:{' '}
             <strong className="text-slate-600">
               {ranking?.recall_at_k !== undefined ? `${(ranking.recall_at_k * 100).toFixed(1)}%` : '—'}
             </strong>
@@ -173,14 +168,12 @@ export const ModelEvidencePage: React.FC = () => {
           <p className="mt-3 text-3xl font-extrabold tracking-tight text-indigo-600">
             {conformal?.target_coverage !== undefined
               ? `${(conformal.target_coverage * 100).toFixed(0)}%`
-              : '95%'}
+              : '—'}
           </p>
           <p className="mt-1 text-xs text-slate-400">
             Avg set size:{' '}
             <strong className="text-slate-600">
-              {conformal?.average_set_size !== undefined
-                ? conformal.average_set_size.toFixed(2)
-                : '1.24'}
+                {conformal?.average_set_size !== undefined ? conformal.average_set_size.toFixed(2) : '—'}
             </strong>
           </p>
         </article>
@@ -190,76 +183,31 @@ export const ModelEvidencePage: React.FC = () => {
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
         <h3 className="text-base font-bold text-slate-900 mb-2">Disjoint Evaluation Protocol (ADR-010 / ADR-017)</h3>
         <p className="text-xs text-slate-500 mb-4">
-          To maintain rigorous statistical validity, calibration and Mondrian conformal thresholds are computed on separate, non-overlapping splits that the base XGBoost model never saw during training.
+          Metrics are attached to the currently serving artifact and computed on a holdout set disjoint from model fitting, calibration, and conformal-threshold fitting. Slices are diagnostics, not a fairness certification.
         </p>
 
         <div className="grid gap-3 sm:grid-cols-4">
           <div className="rounded-lg border border-slate-100 bg-slate-50 p-3.5 text-center">
             <p className="text-xs font-semibold text-slate-500">Training Split</p>
-            <p className="mt-1 text-xl font-bold text-slate-900">{splits?.train ?? '4,225'}</p>
+            <p className="mt-1 text-xl font-bold text-slate-900">{splits?.train?.toLocaleString() ?? '—'}</p>
             <p className="text-[11px] text-slate-400">Model parameter fitting</p>
           </div>
           <div className="rounded-lg border border-slate-100 bg-slate-50 p-3.5 text-center">
             <p className="text-xs font-semibold text-slate-500">Calibration Split</p>
-            <p className="mt-1 text-xl font-bold text-slate-900">{splits?.calibration ?? '1,409'}</p>
+            <p className="mt-1 text-xl font-bold text-slate-900">{splits?.calibration?.toLocaleString() ?? '—'}</p>
             <p className="text-[11px] text-slate-400">Isotonic regression fitting</p>
           </div>
           <div className="rounded-lg border border-slate-100 bg-slate-50 p-3.5 text-center">
             <p className="text-xs font-semibold text-slate-500">Conformal Split</p>
-            <p className="mt-1 text-xl font-bold text-slate-900">{splits?.conformal ?? '704'}</p>
+            <p className="mt-1 text-xl font-bold text-slate-900">{splits?.conformal?.toLocaleString() ?? '—'}</p>
             <p className="text-[11px] text-slate-400">Mondrian alpha thresholds</p>
           </div>
           <div className="rounded-lg border border-slate-100 bg-slate-50 p-3.5 text-center">
             <p className="text-xs font-semibold text-slate-500">Disjoint Holdout</p>
-            <p className="mt-1 text-xl font-bold text-emerald-600">{splits?.holdout ?? '705'}</p>
+            <p className="mt-1 text-xl font-bold text-emerald-600">{splits?.holdout?.toLocaleString() ?? '—'}</p>
             <p className="text-[11px] text-slate-400">Unseen test reporting</p>
           </div>
         </div>
-      </section>
-
-      {/* Thompson Sampling Bandit Posteriors */}
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
-          <div>
-            <h3 className="text-base font-bold text-slate-900">Thompson Sampling Policy Distribution</h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Live Redis-backed Beta distributions determining retention offer exploration/exploitation.
-            </p>
-          </div>
-        </div>
-
-        <div className="grid divide-y divide-slate-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0 border border-slate-100 rounded-xl overflow-hidden">
-          {banditPosteriors?.arms && banditPosteriors.arms.length > 0 ? (
-            banditPosteriors.arms.map((arm) => {
-              const mean = arm.alpha / (arm.alpha + arm.beta);
-              return (
-                <div key={arm.arm} className="bg-slate-50/50 p-5">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-bold uppercase tracking-wider text-slate-600">
-                      {arm.arm.replace('_', ' ')}
-                    </p>
-                    <span className="font-mono text-xs text-slate-400">
-                      &alpha;={arm.alpha}, &beta;={arm.beta}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-2xl font-extrabold text-indigo-700">
-                    {(mean * 100).toFixed(1)}%
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Posterior Mean &bull; {arm.n_observations} recorded outcomes
-                  </p>
-                </div>
-              );
-            })
-          ) : (
-            <div className="col-span-3 p-6 text-center text-xs text-slate-500">
-              Policy arms will appear when Redis connection is active.
-            </div>
-          )}
-        </div>
-        <p className="mt-3 text-[11px] text-slate-400 italic">
-          * Mechanism demonstration. Because public benchmarks contain no randomized intervention history, posterior means describe policy state rather than causal treatment efficacy.
-        </p>
       </section>
 
       {/* Output Score Drift Monitoring */}

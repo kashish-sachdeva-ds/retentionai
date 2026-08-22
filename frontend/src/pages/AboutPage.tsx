@@ -1,168 +1,25 @@
-import React from 'react';
-import {
-  FileText,
-  ShieldAlert,
-  Database,
-  Cpu,
-} from 'lucide-react';
+import { BookOpen, Database, GitBranch, ShieldCheck } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 const ADR_LIST = [
-  { id: 'ADR-000', title: 'Staged Build Process & False-Start Restart', category: 'Foundation' },
-  { id: 'ADR-001', title: 'Business Problem Framing & Constraints', category: 'Problem' },
-  { id: 'ADR-002', title: 'Success Metric (PR-AUC) & Economic Prioritization', category: 'Problem' },
-  { id: 'ADR-003', title: 'Reproducible Data Extraction & Provenance', category: 'Data' },
-  { id: 'ADR-004', title: 'Data Understanding & Schema Validation', category: 'Data' },
-  { id: 'ADR-005', title: 'Hypothesis-Driven Exploratory Data Analysis', category: 'EDA' },
-  { id: 'ADR-006', title: 'Information Value (IV) Feature Engineering', category: 'Features' },
-  { id: 'ADR-007', title: 'Leakage-Safe Preprocessing Pipeline', category: 'Pipeline' },
-  { id: 'ADR-008', title: 'Baseline Logistic Regression Model', category: 'Modeling' },
-  { id: 'ADR-009', title: 'Champion XGBoost Model Selection', category: 'Modeling' },
-  { id: 'ADR-010', title: 'Calibration & Mondrian Conformal Prediction', category: 'Uncertainty' },
-  { id: 'ADR-011', title: 'Survival Analysis (Cox Proportional Hazards)', category: 'Analytics' },
-  { id: 'ADR-012', title: 'Thompson Sampling for Retention Offers', category: 'Policy' },
-  { id: 'ADR-013', title: 'Counterfactual Scenario Search', category: 'Explainability' },
-  { id: 'ADR-014', title: 'FastAPI Production Serving Architecture', category: 'Engineering' },
-  { id: 'ADR-015', title: 'Docker, CI/CD, and Container Orchestration', category: 'DevOps' },
-  { id: 'ADR-016', title: 'SHAP Global & Local Interpretability', category: 'Explainability' },
-  { id: 'ADR-017', title: 'System Hardening & Disjoint Split Audit', category: 'Audit' },
+  ['ADR-000', 'Staged build process & restart'], ['ADR-001', 'Business problem framing'], ['ADR-002', 'Success metric & prioritisation'], ['ADR-003', 'Reproducible data extraction'], ['ADR-004', 'Data understanding & validation'], ['ADR-005', 'Hypothesis-driven EDA'], ['ADR-006', 'Feature engineering'], ['ADR-007', 'Leakage-safe pipeline'], ['ADR-008', 'Baseline logistic regression'], ['ADR-009', 'Champion XGBoost selection'], ['ADR-010', 'Calibration & conformal prediction'], ['ADR-011', 'Survival analysis'], ['ADR-012', 'Offline Thompson-sampling replay'], ['ADR-013', 'Counterfactual scenario search'], ['ADR-014', 'FastAPI serving architecture'], ['ADR-015', 'Docker, CI/CD & tests'], ['ADR-016', 'SHAP investigation'], ['ADR-017', 'Hardening & split audit'],
 ];
 
-export const AboutPage: React.FC = () => {
+export function AboutPage() {
   return (
-    <main className="animate-fade-in max-w-5xl space-y-10 p-5 sm:p-8">
-      {/* Title & Introduction */}
-      <div>
-        <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">
-          About RetentionAI
-        </h2>
-        <p className="mt-2 text-sm leading-relaxed text-slate-600">
-          RetentionAI is a decision-documented machine learning system designed to solve a constrained business question: <em>Which customers should a telecom retention team prioritize when operating with a finite call budget?</em>
-        </p>
-      </div>
+    <main className="mx-auto w-full max-w-6xl space-y-8 p-5 sm:p-8">
+      <header className="max-w-3xl"><p className="text-xs font-bold uppercase tracking-[0.16em] text-indigo-700">System design</p><h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">A decision documented from business constraint to serving artifact.</h1><p className="mt-3 text-sm leading-6 text-slate-600">RetentionAI is a portfolio system for a constrained business question: which customers should a telecom retention team prioritise when it has a finite call budget?</p></header>
 
-      {/* Dataset Provenance */}
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs space-y-4">
-        <div className="flex items-center gap-2 text-slate-900">
-          <Database className="h-5 w-5 text-indigo-600" />
-          <h3 className="text-base font-bold">Dataset &amp; Provenance</h3>
-        </div>
-        <p className="text-xs leading-relaxed text-slate-600">
-          The models in this application are trained on the standard <strong>Kaggle Telco Customer Churn dataset</strong> (7,043 records, 21 attributes).
-        </p>
-        <div className="grid gap-3 sm:grid-cols-3 pt-2">
-          <div className="rounded-lg bg-slate-50 p-3 text-xs border border-slate-100">
-            <span className="font-semibold text-slate-700">Total Observations</span>
-            <p className="mt-1 font-mono text-sm font-bold text-slate-900">7,043 rows</p>
-          </div>
-          <div className="rounded-lg bg-slate-50 p-3 text-xs border border-slate-100">
-            <span className="font-semibold text-slate-700">Baseline Churn Rate</span>
-            <p className="mt-1 font-mono text-sm font-bold text-slate-900">26.5%</p>
-          </div>
-          <div className="rounded-lg bg-slate-50 p-3 text-xs border border-slate-100">
-            <span className="font-semibold text-slate-700">Data Integrity</span>
-            <p className="mt-1 font-mono text-sm font-bold text-emerald-600">SHA-256 Verified</p>
-          </div>
-        </div>
-        <p className="text-xs text-slate-500 italic">
-          Raw data is never committed to Git or hardcoded into Docker containers (ADR-003). Preprocessed artifacts carry verified cryptographic hash tags.
-        </p>
-      </section>
+      <section className="rounded-2xl border border-slate-200 bg-slate-950 p-6 text-white sm:p-8"><p className="text-xs font-bold uppercase tracking-[0.16em] text-indigo-300">System path</p><div className="mt-5 grid gap-3 md:grid-cols-6">{['Telco snapshot', 'Train-only features', 'XGBoost', 'Calibration + uncertainty', 'Versioned artifact', 'Decision-support UI'].map((item, index) => <div key={item} className="flex items-center gap-3 md:block"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-semibold text-indigo-200">{index + 1}</span><p className="text-sm font-medium md:mt-3">{item}</p></div>)}</div><p className="mt-6 max-w-3xl text-sm leading-6 text-slate-300">Telco snapshot → leakage-safe features → XGBoost → calibration + uncertainty → versioned artifact → API → decision-support dashboard.</p></section>
 
-      {/* Core Technical Pillars */}
-      <section className="space-y-4">
-        <div className="flex items-center gap-2 text-slate-900">
-          <Cpu className="h-5 w-5 text-indigo-600" />
-          <h3 className="text-base font-bold">Engineering Pillars</h3>
-        </div>
+      <section className="grid gap-4 md:grid-cols-2"><Proof icon={<GitBranch className="h-5 w-5" />} title="Train-only feature fitting" text="Encoders, filters, and transformers are fit on training data so evaluation and live scoring do not inherit target leakage." /><Proof icon={<ShieldCheck className="h-5 w-5" />} title="Interpretable probability and uncertainty" text="Calibration supports meaningful thresholding; conformal prediction signals when a case remains ambiguous." /><Proof icon={<Database className="h-5 w-5" />} title="Versioned, verified artifacts" text="Serving artifacts record integrity metadata and data provenance rather than silently rebuilding on startup." /><Proof icon={<BookOpen className="h-5 w-5" />} title="Auditable implementation choices" text="The ADRs record alternatives, trade-offs, discovered limitations, and the reasoning behind the final design." /></section>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-600">
-              1. Leakage-Safe Pipeline
-            </h4>
-            <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              All encoders, variance filters, and standardizers are fit strictly on training splits. Test and calibration data are transformed purely out-of-sample to prevent target leakage.
-            </p>
-          </div>
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><h2 className="text-lg font-semibold text-slate-950">Dataset and scope</h2><div className="mt-4 grid gap-4 sm:grid-cols-3"><Fact label="Dataset" value="Kaggle Telco Customer Churn" note="7,043 rows, 21 attributes" /><Fact label="What is estimated" value="Churn propensity" note="A ranking input for a limited review budget" /><Fact label="What is not established" value="Offer uplift" note="No randomised retention-outcome data" /></div><p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900"><strong>Important limitation:</strong> a propensity score does not prove that an offer will retain the customer. The counterfactual view is a limited model-consistent scenario, not a causal recommendation.</p></section>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-600">
-              2. Isotonic Calibration
-            </h4>
-            <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Raw tree probabilities often distort near tails. Isotonic regression transforms raw XGBoost scores into true posterior probabilities, aligning scores directly with economic thresholds.
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-600">
-              3. Mondrian Conformal Prediction
-            </h4>
-            <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Provides guaranteed class-conditional coverage sets at the 95% level on disjoint holdouts, alerting reviewers when predictions carry ambiguous uncertainty.
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-600">
-              4. Thompson Sampling Bandit
-            </h4>
-            <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Explores multiple retention offers with Beta posteriors stored in Redis, dynamically updating routing probabilities as downstream retention feedback is recorded.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* Architecture Decision Records (ADRs) */}
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-slate-900">
-            <FileText className="h-5 w-5 text-indigo-600" />
-            <h3 className="text-base font-bold">18 Architecture Decision Records</h3>
-          </div>
-          <span className="text-xs font-semibold text-slate-500">docs/decisions/</span>
-        </div>
-        <p className="text-xs leading-relaxed text-slate-600">
-          Every stage of the engineering process is backed by an ADR detailing the context, options considered, trade-offs, and final decision rationale.
-        </p>
-
-        <div className="grid gap-2 sm:grid-cols-2 pt-2">
-          {ADR_LIST.map((adr) => (
-            <div
-              key={adr.id}
-              className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50/70 px-3 py-2 text-xs"
-            >
-              <div className="flex items-center gap-2">
-                <span className="font-mono font-bold text-indigo-600">{adr.id}</span>
-                <span className="text-slate-700">{adr.title}</span>
-              </div>
-              <span className="rounded bg-slate-200/60 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
-                {adr.category}
-              </span>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Honest Scope & Disclaimers */}
-      <section className="rounded-xl border border-amber-200 bg-amber-50/80 p-6 space-y-3">
-        <div className="flex items-center gap-2 text-amber-900">
-          <ShieldAlert className="h-5 w-5 text-amber-600" />
-          <h3 className="text-sm font-bold">Scope, Assumptions &amp; Limitations</h3>
-        </div>
-        <ul className="space-y-2 text-xs text-amber-800 list-disc list-inside">
-          <li>
-            <strong>Propensity vs. Uplift:</strong> The Kaggle dataset lacks randomized offer assignment. Predictions reflect churn propensity, not causal treatment effects or proof of retainability.
-          </li>
-          <li>
-            <strong>Cost-Sensitive Decision Boundary:</strong> The 8.33% cutoff assumes an illustrative ~$70 intervention cost against ~$840 annual revenue. In production, this threshold would be calibrated to actual call-center unit economics.
-          </li>
-          <li>
-            <strong>Disjoint Verification:</strong> All holdout metrics are generated from a genuine 4-way split (Train / Calibration / Conformal / Holdout) to preserve exchangeability guarantees.
-          </li>
-        </ul>
-      </section>
+      <details className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><summary className="cursor-pointer text-sm font-semibold text-slate-950">Read architecture decisions ({ADR_LIST.length})</summary><div className="mt-5 grid gap-2 sm:grid-cols-2">{ADR_LIST.map(([id, title]) => <div key={id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700"><span className="mr-2 font-mono text-xs font-bold text-indigo-700">{id}</span>{title}</div>)}</div></details>
     </main>
   );
-};
+}
+
+function Proof({ icon, title, text }: { icon: ReactNode; title: string; text: string }) { return <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><span className="inline-flex rounded-lg bg-indigo-50 p-2 text-indigo-700">{icon}</span><h2 className="mt-4 text-base font-semibold text-slate-950">{title}</h2><p className="mt-2 text-sm leading-6 text-slate-600">{text}</p></article>; }
+function Fact({ label, value, note }: { label: string; value: string; note: string }) { return <div className="rounded-xl bg-slate-50 p-4"><p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</p><p className="mt-2 text-sm font-semibold text-slate-950">{value}</p><p className="mt-1 text-xs leading-5 text-slate-500">{note}</p></div>; }
