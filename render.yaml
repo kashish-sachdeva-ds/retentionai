@@ -19,6 +19,8 @@ services:
         value: "0"
       - key: REDIS_URL
         sync: false # Set in Render dashboard or linked from Upstash
+      - key: ALLOWED_ORIGINS
+        value: "https://retentionai-web.onrender.com,https://retentionai-api.onrender.com"
 
   # ---------------------------------------------------------------------------
   # 2. RetentionAI React 19 Frontend Static Site
