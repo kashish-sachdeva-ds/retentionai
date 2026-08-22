@@ -20,9 +20,12 @@ def live_api_server():
     over genuine HTTP, so testing it needs a genuine server listening,
     not just an in-process TestClient (which app.py, as an external
     caller, has no way to use)."""
-    r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
-    for key in r.keys("bandit:*") + r.keys("counterfactual:*") + r.keys("monitoring:*"):
-        r.delete(key)
+    try:
+        r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+        for key in r.keys("bandit:*") + r.keys("counterfactual:*") + r.keys("monitoring:*"):
+            r.delete(key)
+    except Exception:
+        pass
 
     config = uvicorn.Config(app, host="127.0.0.1", port=8001, log_level="warning")
     server = uvicorn.Server(config)

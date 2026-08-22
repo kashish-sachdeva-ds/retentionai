@@ -21,15 +21,18 @@ def client():
     # Shares db=0 with the live API dev instance -- a real, stated
     # limitation (ADR-014 Trade-offs): running this suite resets live
     # bandit/monitoring state as a side effect.
-    r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
-    for key in (
-        r.keys("bandit:*")
-        + r.keys("counterfactual:*")
-        + r.keys("monitoring:*")
-        + r.keys("prediction:*")
-        + r.keys("feedback:*")
-    ):
-        r.delete(key)
+    try:
+        r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+        for key in (
+            r.keys("bandit:*")
+            + r.keys("counterfactual:*")
+            + r.keys("monitoring:*")
+            + r.keys("prediction:*")
+            + r.keys("feedback:*")
+        ):
+            r.delete(key)
+    except Exception:
+        pass
 
     with TestClient(app) as c:
         yield c

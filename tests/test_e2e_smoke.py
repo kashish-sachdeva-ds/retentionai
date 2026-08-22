@@ -41,9 +41,11 @@ def client():
     """Return an HTTP client for smoke testing."""
     if SMOKE_TEST_URL:
         import httpx
-        return httpx.Client(base_url=SMOKE_TEST_URL.rstrip("/"), timeout=15.0)
-    with TestClient(app) as test_client:
-        yield test_client
+        with httpx.Client(base_url=SMOKE_TEST_URL.rstrip("/"), timeout=15.0) as http_client:
+            yield http_client
+    else:
+        with TestClient(app) as test_client:
+            yield test_client
 
 
 def test_smoke_health(client):

@@ -16,9 +16,16 @@ TEST_DB = 15  # isolated from db=0, which the live API and its dev instance use
 @pytest.fixture
 def redis_client():
     client = redis.Redis(host="localhost", port=6379, db=TEST_DB, decode_responses=True)
-    client.flushdb()
+    try:
+        client.ping()
+        client.flushdb()
+    except (redis.exceptions.ConnectionError, redis.exceptions.RedisError):
+        pytest.skip("Redis server not available at localhost:6379")
     yield client
-    client.flushdb()
+    try:
+        client.flushdb()
+    except Exception:
+        pass
 
 
 def test_arm_initializes_to_uniform_prior(redis_client):
