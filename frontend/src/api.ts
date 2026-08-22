@@ -8,24 +8,28 @@ import type {
   PredictionResponse,
 } from './types';
 
-const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
-let resolvedBaseUrl = (configuredBaseUrl || '/api/v1').replace(/\/$/, '');
-if (
-  resolvedBaseUrl &&
-  !resolvedBaseUrl.startsWith('http://') &&
-  !resolvedBaseUrl.startsWith('https://') &&
-  !resolvedBaseUrl.startsWith('/')
-) {
-  resolvedBaseUrl = `https://${resolvedBaseUrl}`;
+function resolveApiBaseUrl(): string {
+  const configured = import.meta.env.VITE_API_BASE_URL?.trim();
+  if (configured && configured.startsWith('http') && !configured.includes('retentionai-api:')) {
+    return configured.endsWith('/api/v1') ? configured : `${configured.replace(/\/$/, '')}/api/v1`;
+  }
+  // When deployed on Render static site (e.g. retentionai-web.onrender.com or retentionai-web-xxxx.onrender.com),
+  // automatically route API calls to the corresponding retentionai-api web service domain.
+  if (typeof window !== 'undefined' && window.location.hostname.endsWith('.onrender.com')) {
+    const apiHost = window.location.hostname.replace(/^retentionai-web/, 'retentionai-api');
+    return `https://${apiHost}/api/v1`;
+  }
+  let base = (configured || '/api/v1').replace(/\/$/, '');
+  if (base && !base.startsWith('http://') && !base.startsWith('https://') && !base.startsWith('/')) {
+    base = `https://${base}`;
+  }
+  if (base.startsWith('http') && !base.endsWith('/api/v1') && !base.endsWith('/api')) {
+    base = `${base}/api/v1`;
+  }
+  return base;
 }
-if (
-  resolvedBaseUrl.startsWith('http') &&
-  !resolvedBaseUrl.endsWith('/api/v1') &&
-  !resolvedBaseUrl.endsWith('/api')
-) {
-  resolvedBaseUrl = `${resolvedBaseUrl}/api/v1`;
-}
-const API_BASE_URL = resolvedBaseUrl;
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 export class ApiError extends Error {
   status?: number;
