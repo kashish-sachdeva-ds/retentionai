@@ -33,10 +33,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    void getHealth()
-      .then((serviceHealth) => { setHealth(serviceHealth); setHealthError(null); })
-      .catch((error: unknown) => { setHealth(null); setHealthError(error instanceof Error ? error.message : 'Could not reach the model service.'); });
-  }, []);
+    void refreshHealth();
+    const interval = window.setInterval(() => {
+      void refreshHealth();
+    }, 15000);
+    return () => window.clearInterval(interval);
+  }, [refreshHealth]);
 
   useEffect(() => {
     if (!toastMessage) return undefined;
