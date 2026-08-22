@@ -1,0 +1,71 @@
+name: Deploy to Azure
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Azure
+        uses: azure/login@v2
+        if: env.AZURE_CREDENTIALS != ''
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+        env:
+          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Log in to Azure Container Registry (ACR)
+        if: env.AZURE_CREDENTIALS != ''
+        run: |
+          az acr login --name ${{ secrets.ACR_NAME || 'retentionairegistry' }}
+        env:
+          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Build and Push API image to ACR
+        if: env.AZURE_CREDENTIALS != ''
+        run: |
+          ACR_REGISTRY="${{ secrets.ACR_NAME || 'retentionairegistry' }}.azurecr.io"
+          docker build -t $ACR_REGISTRY/retentionai-api:${{ github.sha }} -t $ACR_REGISTRY/retentionai-api:latest -f api/Dockerfile .
+          docker push $ACR_REGISTRY/retentionai-api:${{ github.sha }}
+          docker push $ACR_REGISTRY/retentionai-api:latest
+        env:
+          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Build and Push Web Gateway image to ACR
+        if: env.AZURE_CREDENTIALS != ''
+        run: |
+          ACR_REGISTRY="${{ secrets.ACR_NAME || 'retentionairegistry' }}.azurecr.io"
+          docker build -t $ACR_REGISTRY/retentionai-web:${{ github.sha }} -t $ACR_REGISTRY/retentionai-web:latest -f nginx/Dockerfile .
+          docker push $ACR_REGISTRY/retentionai-web:${{ github.sha }}
+          docker push $ACR_REGISTRY/retentionai-web:latest
+        env:
+          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy Revisions to Azure Container Apps
+        if: env.AZURE_CREDENTIALS != ''
+        run: |
+          ACR_REGISTRY="${{ secrets.ACR_NAME || 'retentionairegistry' }}.azurecr.io"
+          az containerapp update \
+            --name retentionai-api \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP || 'retentionai-rg' }} \
+            --image $ACR_REGISTRY/retentionai-api:${{ github.sha }}
+
+          az containerapp update \
+            --name retentionai-web \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP || 'retentionai-rg' }} \
+            --image $ACR_REGISTRY/retentionai-web:${{ github.sha }}
+        env:
+          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Smoke Test Live Azure Deployment
+        if: env.AZURE_CREDENTIALS != ''
+        run: |
+          DEPLOYED_URL="${{ secrets.DEPLOYED_APP_URL || 'https://retentionai.azurecontainerapps.io' }}"
+          timeout 60 bash -c "until curl -sf $DEPLOYED_URL/api/v1/health; do sleep 3; done"
+        env:
+          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
