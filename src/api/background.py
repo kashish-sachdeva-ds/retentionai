@@ -7,12 +7,34 @@ Results land in Redis, polled via GET /counterfactual/{request_id}.
 """
 
 import json
+import logging
+import threading
+from typing import Dict
 
 import redis
 
 from src.explain.counterfactual import find_counterfactual
 
+logger = logging.getLogger("retentionai.background")
+
 COUNTERFACTUAL_TTL_SECONDS = 3600
+
+# In-memory fallback cache for counterfactual results
+_cf_lock = threading.Lock()
+_fallback_counterfactuals: Dict[str, dict] = {}
+
+
+def get_stored_counterfactual(client: redis.Redis, request_id: str):
+    """Retrieve counterfactual results with fallback to in-memory store."""
+    try:
+        payload = client.get(f"counterfactual:{request_id}")
+        if payload is not None:
+            return json.loads(payload)
+    except Exception:
+        pass
+
+    with _cf_lock:
+        return _fallback_counterfactuals.get(request_id)
 
 
 def compute_and_store_counterfactual(
@@ -32,8 +54,13 @@ def compute_and_store_counterfactual(
     (including binary dummies like ContractCommitmentMonths) by name
     within this list."""
     result = find_counterfactual(
-        model, instance_model_input, instance_raw, scaler, scaled_columns,
-        threshold=threshold, has_internet=has_internet,
+        model,
+        instance_model_input,
+        instance_raw,
+        scaler,
+        scaled_columns,
+        threshold=threshold,
+        has_internet=has_internet,
     )
 
     payload = {
@@ -41,6 +68,13 @@ def compute_and_store_counterfactual(
         "raw_changes": result["raw_changes"] if result else None,
         "flippable": result is not None,
     }
-    redis_client.set(
-        f"counterfactual:{request_id}", json.dumps(payload, default=str), ex=COUNTERFACTUAL_TTL_SECONDS
-    )
+
+    try:
+        redis_client.set(
+            f"counterfactual:{request_id}",
+            json.dumps(payload, default=str),
+            ex=COUNTERFACTUAL_TTL_SECONDS,
+        )
+    except Exception:
+        with _cf_lock:
+            _fallback_counterfactuals[request_id] = payload

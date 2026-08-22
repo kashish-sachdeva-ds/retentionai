@@ -37,7 +37,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field, model_validator
 from sklearn.model_selection import train_test_split
 
-from src.api.background import compute_and_store_counterfactual
+from src.api.background import compute_and_store_counterfactual, get_stored_counterfactual
 from src.api.inference import transform_customer_for_inference
 from src.api.redis_bandit import (
     get_arm_posterior,
@@ -483,13 +483,10 @@ def predict(customer: CustomerRequest, background_tasks: BackgroundTasks, reques
 @v1.get("/counterfactual/{request_id}", tags=["Inference"], summary="Poll counterfactual search result")
 def get_counterfactual(request_id: str):
     """Poll the status of an asynchronous counterfactual lever search initiated by /predict."""
-    try:
-        payload = redis_client.get(f"counterfactual:{request_id}")
-        if payload is None:
-            return {"status": "pending_or_not_found"}
-        return json.loads(payload)
-    except Exception:
+    payload = get_stored_counterfactual(redis_client, request_id)
+    if payload is None:
         return {"status": "pending_or_not_found"}
+    return payload
 
 
 @v1.get("/monitoring/drift", tags=["Monitoring"], summary="Distribution drift report")
