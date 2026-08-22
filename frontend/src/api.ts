@@ -13,11 +13,14 @@ function resolveApiBaseUrl(): string {
   if (configured && configured.startsWith('http') && !configured.includes('retentionai-api:')) {
     return configured.endsWith('/api/v1') ? configured : `${configured.replace(/\/$/, '')}/api/v1`;
   }
-  // When deployed on Render static site (e.g. retentionai-web.onrender.com or retentionai-web-xxxx.onrender.com),
-  // automatically route API calls to the corresponding retentionai-api web service domain.
+  // When deployed on Render static site (e.g. retentionai-web.onrender.com)
   if (typeof window !== 'undefined' && window.location.hostname.endsWith('.onrender.com')) {
     const apiHost = window.location.hostname.replace(/^retentionai-web/, 'retentionai-api');
     return `https://${apiHost}/api/v1`;
+  }
+  // When deployed on Vercel (e.g. *.vercel.app) or custom domain without explicit ENV
+  if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
+    return 'https://retentionai-api.onrender.com/api/v1';
   }
   let base = (configured || '/api/v1').replace(/\/$/, '');
   if (base && !base.startsWith('http://') && !base.startsWith('https://') && !base.startsWith('/')) {
