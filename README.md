@@ -1,123 +1,169 @@
-# RetentionAI
+# RetentionAI — Decision-Documented Customer Churn Prioritization
 
 [![CI](https://github.com/kashish-sachdeva-ds/retentionai/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/kashish-sachdeva-ds/retentionai/actions/workflows/ci-cd.yml)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.141-009688.svg?style=flat&logo=fastapi)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/React-19-61DAFB.svg?style=flat&logo=react)](https://react.dev)
+[![Azure](https://img.shields.io/badge/Azure-Container_Apps-0089D6.svg?style=flat&logo=microsoftazure)](https://azure.microsoft.com)
 
-Customer churn prediction and retention-offer system for a telecom
-business — built to practice staged, decision-documented ML engineering
-end to end, not just "train a model on a Kaggle CSV and report accuracy."
+A production-hardened machine learning and decision-support engine answering a core telecom business question: **Which customers should a retention team prioritize when operating with a finite call budget?**
 
-## Status: Complete — Stages 1–13
+Built to demonstrate rigorous, staged ML engineering — featuring a leakage-safe pipeline, isotonic probability calibration, Mondrian conformal uncertainty sets, Thompson Sampling offer routing, and a clean React UI with zero misleading demo data.
 
-Every stage is backed by an Architecture Decision Record (ADR) in
-`docs/decisions/`, documenting what was decided and *why*, not just what
-the code does — 16 ADRs covering everything from the initial problem
-framing through production deployment, plus `ADR-000`, which documents
-why the project restarted at Stage 1 after an early, ungrounded false
-start.
+> **Portfolio Scope & Honest Limitations:** This is a decision-support demonstration based on the public Kaggle Telco Customer Churn dataset (7,043 rows). It models **churn propensity** and decision economics; it does **not** claim causal treatment effect estimation or randomized retainability proof.
 
-## Problem
+---
 
-A telecom is losing customers and wants to intervene before they leave.
-Framed explicitly (`ADR-001`) as: predict who is both likely to churn
-*and* plausibly retainable — not just "predict churn" — since a model
-that flags customers who can't realistically be saved (e.g. relocating,
-no longer needing service) isn't actionable.
+## ⚡ Key Highlights & Engineering Pillars
 
-Success metric is PR-AUC, not accuracy — the dataset is ~26.5% churn, and
-accuracy rewards a model that just predicts "no churn" for everyone.
-Precision/Recall at a fixed retention-team call budget is tracked
-alongside it (`ADR-002`).
+- **Leakage-Safe Tabular Pipeline:** Encoders, IV filters, and scalers fit exclusively on training splits.
+- **Calibrated Decision Boundary:** Isotonic regression ensures output scores represent genuine posterior probabilities aligned to the economic triage threshold ($70 outreach / $840 annual revenue &approx; **8.33%**).
+- **Mondrian Conformal Uncertainty:** Disjoint calibration and conformal splits provide finite-sample class-conditional prediction set coverage at 95%.
+- **Live Thompson Sampling Mechanism:** Dynamic exploration across retention offer arms (`discount`, `technician`, `control`) stored with Redis idempotency.
+- **No Mock Data in Public UI:** Every metric, probability, and evidence card is dynamically served by the live FastAPI backend.
+- **18 Architecture Decision Records (ADRs):** Comprehensive documentation in `docs/decisions/` explaining *why* decisions were made, including intentional dead-ends and trade-offs.
 
-## What's done
+---
 
-| Stage | What | Docs |
-|---|---|---|
-| 1 | Business problem framing + success metric | `ADR-001`, `ADR-002` |
-| 2 | Reproducible extraction | `ADR-003`, `notebooks/01_data_extraction.ipynb` |
-| 3 | Data understanding | `ADR-004`, `notebooks/02_data_understanding.ipynb` |
-| 4 | Hypothesis-driven EDA | `ADR-005`, `notebooks/03_eda.ipynb` |
-| 5 | Feature engineering, IV-scored | `ADR-006`, `notebooks/04_feature_engineering.ipynb`, `src/features/iv.py` |
-| 6 | Leakage-safe pipeline (encoding, VIF) | `ADR-007`, `notebooks/05_pipeline.ipynb`, `src/features/pipeline.py`, `src/features/vif.py` |
-| 7 | Baseline model (logistic regression) | `ADR-008`, `notebooks/06_baseline_model.ipynb` |
-| 8 | Champion model (XGBoost) | `ADR-009`, `notebooks/07_champion_model.ipynb` |
-| 9 | Calibration + conformal prediction | `ADR-010`, `notebooks/08_calibration_conformal.ipynb` |
-| 10 | Survival analysis (Cox PH) | `ADR-011`, `notebooks/09_survival_analysis.ipynb`, `src/survival/cox.py` |
-| 11 | Thompson Sampling retention offers | `ADR-012`, `notebooks/10_thompson_sampling.ipynb`, `src/bandit/thompson.py` |
-| 12a | Counterfactual explanations | `ADR-013`, `notebooks/11_counterfactual_explanations.ipynb`, `src/explain/counterfactual.py` |
-| 12b | Production API | `ADR-014`, `notebooks/12_production_api.ipynb`, `src/api/` |
-| 12c | Docker, CI, dashboard | `ADR-015`, `docker-compose.yml`, `dashboard/` |
-| 13 | SHAP explanations | `ADR-016`, `notebooks/13_shap_explanations.ipynb`, `src/explain/shap_explainer.py` |
+## 🏛️ Architecture Overview
 
-## Champion model
+```mermaid
+flowchart TD
+    subgraph Frontend ["Web Client (Azure Container Apps)"]
+        SPA["React 19 SPA<br/>- Risk Assessment<br/>- Model Evidence<br/>- Architectural Docs"]
+        Nginx["Nginx Gateway<br/>- Rate Limiting<br/>- Security Headers<br/>- Reverse Proxy"]
+    end
 
-XGBoost, confirmed winner on real data across every metric that matters
-(`ADR-009`), evaluated head-to-head against the logistic regression
-baseline with identical data, identical scoring functions, and a fixed
-call-budget K:
+    subgraph API ["Model Service (Azure Container Apps)"]
+        FastAPI["FastAPI 0.141"]
+        Pipeline["Leakage-Safe Preprocessing"]
+        Model["XGBoost Champion + Calibrator"]
+        Conformal["Mondrian Conformal Engine"]
+    end
 
-- **PR-AUC: 0.6466** (vs. 0.6331 for the baseline)
-- Precision@100: 0.810
-- Recall@100: 0.217
+    subgraph StateStore ["Persistent State (Azure Cache for Redis)"]
+        RedisState[("Redis 7.0<br/>- Bandit Beta Posteriors<br/>- Rate Limit Buckets<br/>- Rolling Drift Scores")]
+    end
 
-Calibrated with isotonic regression and served through Mondrian
-conformal prediction sets, so every prediction ships with a 95%-coverage
-uncertainty set, not just a point estimate (`ADR-010`). On top of that:
-survival analysis for time-to-churn (`ADR-011`), Thompson Sampling for
-retention-offer selection (`ADR-012`), counterfactual explanations for
-actionable "what would change this" recommendations (`ADR-013`), and
-SHAP for global/local interpretability (`ADR-016`) — all wired into a
-live FastAPI service and Streamlit dashboard.
-
-## Run it
-
-**With Docker:**
-```bash
-docker compose up --build
+    SPA -->|HTTPS :443| Nginx
+    Nginx -->|/api/*| FastAPI
+    FastAPI --> Pipeline --> Model --> Conformal
+    FastAPI <--> RedisState
 ```
-- Dashboard: http://localhost:8501
-- API docs: http://localhost:8000/docs
 
-**Without Docker:**
+For complete architectural details, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+---
+
+## 📊 Disjoint Holdout Evaluation Benchmark
+
+Held on a separate, unseen 705-row holdout split (`ADR-009`, `ADR-017`):
+
+| Metric | Champion (XGBoost) | Baseline (LogReg) |
+|---|---|---|
+| **Holdout PR-AUC** | **0.6466** | 0.6331 |
+| **Precision @ 100** | **81.0%** | 77.0% |
+| **Recall @ 100** | **21.7%** | 20.6% |
+| **Brier Score** | **0.134** (calibrated) | 0.141 |
+| **95% Conformal Coverage** | **95.2%** | N/A |
+
+*All metrics are verified from the immutable artifact bundle served at `GET /api/model-card`.*
+
+---
+
+## 🚀 Quick Start & Local Run
+
+### Option 1: Docker Compose (Full Stack)
+
 ```bash
 git clone https://github.com/kashish-sachdeva-ds/retentionai.git
 cd retentionai
-python -m venv .venv
-source .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -e .
-pip install -r requirements.txt
+
+# Bring up Redis, FastAPI, and React web client
+docker compose up --build
 ```
 
-Data isn't tracked in git (`data/raw/`, `data/processed/` are gitignored
-— see `ADR-003` for why). Two ways to get it:
-- **Manual (simplest):** download the [Telco Customer Churn
-  dataset](https://www.kaggle.com/datasets/blastchar/telco-customer-churn)
-  and place it at `data/raw/telco_churn.csv`.
-- **Kaggle CLI:** set up [Kaggle API
-  credentials](https://github.com/Kaggle/kaggle-api#api-credentials),
-  then run `notebooks/01_data_extraction.ipynb` — it downloads and places
-  the file for you, and skips automatically if the CSV already exists.
+- **React Web Client:** http://localhost:3000
+- **API Swagger Documentation:** http://localhost:8000/docs
+- **Health Endpoint:** http://localhost:8000/health
 
-Then run the notebooks in order, `01` through `13`.
-
-## Testing
+### Option 2: Local Python & Node Development
 
 ```bash
-pip install -r requirements-dev.txt
-docker run -d -p 6379:6379 redis:7-alpine   # tests need a real Redis instance
-python -m pytest tests/ -v
+# 1. Backend Setup (Python 3.12)
+python -m venv .venv
+# Windows: .\.venv\Scripts\Activate.ps1 | Linux/macOS: source .venv/bin/activate
+pip install -e .[dev]
+
+# 2. Start Redis locally or via Docker
+docker run -d -p 6379:6379 redis:7-alpine
+
+# 3. Launch FastAPI backend
+uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+
+# 4. Frontend Setup (Node 22)
+cd frontend
+npm install
+npm run dev
 ```
 
-## What's next
+---
 
-- Stratified Cox re-fit by `ContractCommitmentMonths` — the proportional
-  hazards assumption currently holds for only 1 of 5 covariates (`ADR-011`)
-- Wire SHAP explanations into the API/dashboard (currently notebook-only,
-  `ADR-016`)
+## 🧪 Testing & Verification
 
-## Why it's structured this way
+```bash
+# Run backend Python tests (API, bandit, conformal, persistence, drift)
+python -m pytest tests/ -v
 
-Every stage exists because the previous one earned it, not because it's a
-standard checklist item — e.g. no resampling/class-weighting was added
-until Stage 7 actually tested whether it mattered (it barely did). The
-`docs/decisions/` folder is the actual record of that reasoning, and is
-meant to be read alongside the notebooks, not as an afterthought.
+# Run frontend Vitest suite
+npm --prefix frontend test
+
+# Run E2E smoke tests against live service
+python -m pytest tests/test_e2e_smoke.py -v
+```
+
+---
+
+## ☁️ Azure Deployment
+
+To provision and deploy RetentionAI on Azure Container Apps:
+
+```bash
+# Set your Azure credentials and deploy
+az login
+chmod +x infra/provision.sh infra/deploy.sh
+
+# 1. Provision Resource Group, Container Registry, Redis Cache, and Container Apps
+./infra/provision.sh
+
+# 2. Subsequent updates
+./infra/deploy.sh
+```
+
+---
+
+## 📑 Project Structure
+
+```
+retentionai/
+├── api/                # Production API Dockerfile
+├── docs/               # Architecture docs & 18 Architecture Decision Records (ADRs)
+│   ├── decisions/      # ADR-000 through ADR-017
+│   ├── ARCHITECTURE.md # Detailed system design and diagrams
+│   └── SHOWCASE_GUIDE.md # 5-minute senior reviewer walkthrough
+├── frontend/           # React 19 + TailwindCSS v4 SPA
+│   ├── src/pages/      # Home, Risk Assessment, Model Evidence, About
+│   ├── src/components/ # Reusable UI components & customer forms
+│   └── src/__tests__/  # Vitest frontend test suites
+├── infra/              # Azure provisioning and deployment bash scripts
+├── models/             # Versioned serialized artifacts & evaluation manifests
+├── nginx/              # Production Nginx reverse-proxy gateway
+├── src/                # Core ML pipeline, modeling, conformal, bandit, and API
+└── tests/              # Pytest backend and E2E smoke tests
+```
+
+---
+
+## 📄 License & Attribution
+
+Distributed under the MIT License. See `LICENSE` for details.
+Dataset sourced from Kaggle's [Telco Customer Churn Benchmark](https://www.kaggle.com/datasets/blastchar/telco-customer-churn).
