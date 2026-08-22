@@ -4,10 +4,42 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "retentionai"
-version = "0.1.0"
+version = "0.2.0"
+description = "Decision-documented telecom churn prediction portfolio project"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.141.1",
+    "httpx==0.28.1",
+    "imbalanced-learn==0.14.2",
+    "Jinja2==3.1.6",
+    "kaggle==2.2.3",
+    "lifelines==0.30.3",
+    "matplotlib==3.11.0",
+    "numpy==2.5.1",
+    "pandas==2.2.3",
+    "plotly==6.9.0",
+    "prometheus-client==0.21.1",
+    "redis==8.1.0",
+    "requests==2.34.2",
+    "scikit-learn==1.9.0",
+    "seaborn==0.13.2",
+    "shap==0.52.0",
+    "statsmodels==0.14.6",
+    "streamlit==1.61.1",
+    "uvicorn==0.52.2",
+    "xgboost==3.4.0",
+]
 
-[tool.setuptools]
-packages = ["src"]
+[project.optional-dependencies]
+dev = [
+    "ipykernel==7.3.0",
+    "pytest==9.1.1",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
