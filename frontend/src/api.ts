@@ -9,7 +9,23 @@ import type {
 } from './types';
 
 const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
-const API_BASE_URL = (configuredBaseUrl || '/api/v1').replace(/\/$/, '');
+let resolvedBaseUrl = (configuredBaseUrl || '/api/v1').replace(/\/$/, '');
+if (
+  resolvedBaseUrl &&
+  !resolvedBaseUrl.startsWith('http://') &&
+  !resolvedBaseUrl.startsWith('https://') &&
+  !resolvedBaseUrl.startsWith('/')
+) {
+  resolvedBaseUrl = `https://${resolvedBaseUrl}`;
+}
+if (
+  resolvedBaseUrl.startsWith('http') &&
+  !resolvedBaseUrl.endsWith('/api/v1') &&
+  !resolvedBaseUrl.endsWith('/api')
+) {
+  resolvedBaseUrl = `${resolvedBaseUrl}/api/v1`;
+}
+const API_BASE_URL = resolvedBaseUrl;
 
 export class ApiError extends Error {
   status?: number;
