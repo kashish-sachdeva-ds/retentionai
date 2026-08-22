@@ -243,14 +243,33 @@ app.add_middleware(
 # Structured Request/Response Logging & Request-ID Middleware
 app.add_middleware(RequestContextMiddleware)
 
-# Initialize Redis client
+# Initialize Redis client with rapid fallback socket timeouts
 try:
     if REDIS_URL and REDIS_URL.startswith("redis"):
-        redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+        redis_client = redis.from_url(
+            REDIS_URL,
+            decode_responses=True,
+            socket_connect_timeout=0.25,
+            socket_timeout=0.25,
+        )
     else:
-        redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0, decode_responses=True)
+        redis_client = redis.Redis(
+            host=REDIS_HOST,
+            port=REDIS_PORT,
+            db=0,
+            decode_responses=True,
+            socket_connect_timeout=0.25,
+            socket_timeout=0.25,
+        )
 except Exception:
-    redis_client = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+    redis_client = redis.Redis(
+        host="localhost",
+        port=6379,
+        db=0,
+        decode_responses=True,
+        socket_connect_timeout=0.25,
+        socket_timeout=0.25,
+    )
 
 # Rate Limiter
 rate_limiter = RateLimiter(redis_client=redis_client)

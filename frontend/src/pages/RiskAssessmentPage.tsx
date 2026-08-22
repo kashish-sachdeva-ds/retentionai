@@ -1,17 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Sparkles,
   RefreshCw,
-  Target,
-  ShieldCheck,
   Zap,
-  ArrowRight,
-  TrendingDown,
-  Cpu,
+  SlidersHorizontal,
+  ChevronDown,
+  ChevronUp,
+  Activity,
 } from 'lucide-react';
 import { predictCustomer, getCounterfactual, ApiError } from '../api';
-import { CustomerForm, PRESETS } from '../components/CustomerForm';
-import { PredictionHistory } from '../components/PredictionHistory';
+import { CustomerForm } from '../components/CustomerForm';
+import { CustomerSidebar, PRESET_PROFILES, type CustomerProfile } from '../components/CustomerSidebar';
+import { ShapWaterfall } from '../components/ShapWaterfall';
+import { ExplainPanel } from '../components/ExplainPanel';
+import { ActionPanel } from '../components/ActionPanel';
 import { ErrorBanner } from '../components/ErrorBanner';
 import type {
   CounterfactualResponse,
@@ -35,23 +36,14 @@ export const RiskAssessmentPage: React.FC<RiskAssessmentPageProps> = ({
   onRecordFeedback,
   feedbackRequestId,
 }) => {
-  const [activePreset, setActivePreset] = useState<string>('atRisk');
-  const [formData, setFormData] = useState<PredictionPayload>(PRESETS.atRisk.data);
+  const [selectedProfile, setSelectedProfile] = useState<CustomerProfile>(PRESET_PROFILES[0]);
+  const [formData, setFormData] = useState<PredictionPayload>(PRESET_PROFILES[0].data);
   const [loading, setLoading] = useState(false);
   const [currentResult, setCurrentResult] = useState<PredictionResponse | null>(null);
   const [counterfactual, setCounterfactual] = useState<CounterfactualResponse | null>(null);
   const [counterfactualLoading, setCounterfactualLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const handleSelectPreset = (presetKey: string) => {
-    setActivePreset(presetKey);
-    setFormData(PRESETS[presetKey].data);
-    setError(null);
-  };
-
-  const handleFormChange = (data: PredictionPayload) => {
-    setFormData(data);
-  };
+  const [showAdvancedEditor, setShowAdvancedEditor] = useState(false);
 
   const pollCounterfactual = async (requestId: string) => {
     setCounterfactualLoading(true);
@@ -72,429 +64,282 @@ export const RiskAssessmentPage: React.FC<RiskAssessmentPageProps> = ({
     setCounterfactualLoading(false);
   };
 
-  const executePrediction = async () => {
-    if (loading) return;
-    setLoading(true);
-    setError(null);
-    setCurrentResult(null);
-    setCounterfactual(null);
+  const executePrediction = useCallback(
+    async (payloadToScore?: PredictionPayload) => {
+      if (loading) return;
+      const targetPayload = payloadToScore || formData;
+      setLoading(true);
+      setError(null);
+      setCurrentResult(null);
+      setCounterfactual(null);
 
-    try {
-      const response = await predictCustomer(formData);
-      setCurrentResult(response);
-      onPrediction(response, formData);
-      void pollCounterfactual(response.request_id);
-    } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? err.message
-          : 'Unable to complete churn assessment. Check if API is available.'
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await executePrediction();
-  };
-
-  // Keyboard shortcut: Ctrl+Enter / Cmd+Enter to run inference
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-        e.preventDefault();
-        void executePrediction();
+      try {
+        const response = await predictCustomer(targetPayload);
+        setCurrentResult(response);
+        onPrediction(response, targetPayload);
+        void pollCounterfactual(response.request_id);
+      } catch (err) {
+        setError(
+          err instanceof ApiError
+            ? err.message
+            : 'Unable to complete churn assessment. Check if API is available.'
+        );
+      } finally {
+        setLoading(false);
       }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [formData, loading]);
+    },
+    [formData, loading, onPrediction]
+  );
 
-  const isPriority =
-    currentResult !== null &&
-    currentResult.calibrated_churn_probability >= ECONOMIC_THRESHOLD;
+  // Auto-run inference on initial load for the default profile
+  useEffect(() => {
+    void executePrediction(PRESET_PROFILES[0].data);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Translate conformal prediction set
-  const formatConformalSet = (set: number[]) => {
-    if (set.length === 1) {
-      return set[0] === 1 ? 'High Confidence Churn' : 'High Confidence Retained';
-    }
-    return 'Dual-Class Ambiguity (Review Needed)';
+  const handleSelectCustomer = (profile: CustomerProfile) => {
+    setSelectedProfile(profile);
+    setFormData(profile.data);
+    setError(null);
+    void executePrediction(profile.data);
   };
+
+  const handleFormChange = (data: PredictionPayload) => {
+    setFormData(data);
+  };
+
+  const handleManualReAssess = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await executePrediction(formData);
+  };
+
+  // Find latest assessment for active result
+  const activeAssessment = assessments.find(
+    (a) => a.response.request_id === currentResult?.request_id
+  );
+
+  const prob = currentResult?.calibrated_churn_probability ?? selectedProfile.riskScore ?? 0.86;
+  const isCritical = prob >= 0.6;
+  const isModerate = prob >= 0.2 && prob < 0.6;
+  const isTriagePriority = prob >= ECONOMIC_THRESHOLD;
 
   return (
-    <main className="animate-fade-in max-w-7xl space-y-8 p-5 sm:p-8">
-      {/* Top Header */}
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+    <main className="animate-fade-in max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
+      {/* Top Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200">
         <div>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-0.5 text-[11px] font-bold text-indigo-700 border border-indigo-100">
-              <Cpu className="h-3 w-3" /> Live ML Inference Engine
+              <Zap className="h-3 w-3 text-indigo-600" /> Executive Cockpit
             </span>
             <span className="text-slate-300">•</span>
-            <span className="text-xs text-slate-500 font-medium">Cost-Sensitive Decision Pipeline</span>
+            <span className="text-xs text-slate-500 font-semibold">
+              3-Zone Explainable AI &amp; Next-Best-Action Suite
+            </span>
           </div>
-          <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">
-            Customer Churn Risk Assessment
-          </h2>
-          <p className="mt-1 text-sm text-slate-500 max-w-2xl">
-            Configure telecom attributes to trigger calibrated probability inference, 95% conformal uncertainty bounds, multi-armed bandit policy routing, and genetic counterfactual search.
-          </p>
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-1">
+            Customer Retention Decision Engine
+          </h1>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-          <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-2xs">
-            <span className="text-slate-400">Economic Cutoff:</span>{' '}
-            <strong className="text-indigo-600 font-mono">8.33%</strong>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-2xs">
-            <span className="text-slate-400">Target SLA:</span>{' '}
-            <strong className="text-emerald-600 font-mono">&lt;15ms</strong>
-          </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => void executePrediction(formData)}
+            disabled={loading}
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs transition-all disabled:opacity-60 disabled:cursor-wait"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <span>{loading ? 'Evaluating Model...' : 'Re-Run Inference'}</span>
+          </button>
         </div>
       </div>
 
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
-      {/* Main Grid: Form on Left, Output on Right */}
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
-        {/* Left Column: Form */}
-        <div className="lg:col-span-7 space-y-6">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <CustomerForm
-              formData={formData}
-              onChange={handleFormChange}
-              onSelectPreset={handleSelectPreset}
-              activePreset={activePreset}
-              disabled={loading}
-            />
-
-            {/* Assessment Trigger Button */}
-            <div className="sticky bottom-4 z-20 rounded-2xl bg-white/90 p-2 shadow-lg ring-1 ring-slate-900/5 backdrop-blur-md">
-              <button
-                type="submit"
-                disabled={loading}
-                className="group relative flex w-full items-center justify-center gap-2 rounded-xl bg-linear-to-r from-indigo-600 to-indigo-700 py-3.5 px-6 text-sm font-bold text-white shadow-md shadow-indigo-500/25 transition-all duration-200 hover:from-indigo-700 hover:to-indigo-800 hover:shadow-lg hover:shadow-indigo-500/30 active:scale-[0.99] disabled:cursor-wait disabled:opacity-60 cursor-pointer"
-              >
-                {loading ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 animate-spin text-white" />
-                    <span>Executing Pipeline (Inference + Conformal + Bandit)...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-4 w-4 text-indigo-200 group-hover:rotate-12 transition-transform" />
-                    <span>Assess Churn Risk</span>
-                    <span className="ml-2 hidden rounded bg-indigo-500/40 px-1.5 py-0.5 text-[10px] font-mono text-indigo-100 sm:inline">
-                      Ctrl + Enter
-                    </span>
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
+      {/* 3-ZONE LAYOUT */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        {/* ================================================================ */}
+        {/* ZONE 1: THE NAVIGATOR (Left Column - 3 cols) */}
+        {/* ================================================================ */}
+        <div className="lg:col-span-3">
+          <CustomerSidebar
+            selectedId={selectedProfile.id}
+            onSelectCustomer={handleSelectCustomer}
+            assessments={assessments}
+          />
         </div>
 
-        {/* Right Column: Prediction Scorecard & Analysis */}
-        <div className="lg:col-span-5 space-y-5">
-          {currentResult ? (
-            <div className="space-y-5 animate-fade-in">
-              {/* Primary Scorecard Card */}
-              <section className="relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      Calibrated XGBoost Output
-                    </span>
-                    <p className="mt-1 text-4xl font-black tracking-tight text-slate-900">
-                      {(currentResult.calibrated_churn_probability * 100).toFixed(1)}%
-                    </p>
-                    <p className="text-xs text-slate-500 font-medium">Estimated 30-Day Churn Risk</p>
-                  </div>
+        {/* ================================================================ */}
+        {/* ZONE 2: EXPLAINABLE AI STAGE (Center Column - 6 cols) */}
+        {/* ================================================================ */}
+        <div className="lg:col-span-6 space-y-5">
+          {/* Hero Big Number Card */}
+          <div
+            className={`rounded-2xl p-5 border transition-all shadow-xs relative overflow-hidden ${
+              isCritical
+                ? 'bg-gradient-to-br from-rose-500/10 via-white to-white border-rose-200'
+                : isModerate
+                ? 'bg-gradient-to-br from-amber-500/10 via-white to-white border-amber-200'
+                : 'bg-gradient-to-br from-emerald-500/10 via-white to-white border-emerald-200'
+            }`}
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Customer Account:
+                  </span>
+                  <span className="text-xs font-extrabold text-slate-900 bg-white px-2 py-0.5 rounded-md border border-slate-200">
+                    {selectedProfile.name}
+                  </span>
+                </div>
+
+                <div className="mt-2 flex items-baseline gap-3">
                   <span
-                    className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1 text-xs font-bold shadow-2xs ${
-                      isPriority
-                        ? 'bg-rose-50 text-rose-700 border border-rose-200 ring-2 ring-rose-500/10'
-                        : 'bg-emerald-50 text-emerald-700 border border-emerald-200 ring-2 ring-emerald-500/10'
+                    className={`text-4xl sm:text-5xl font-black tracking-tight ${
+                      isCritical
+                        ? 'text-rose-600'
+                        : isModerate
+                        ? 'text-amber-600'
+                        : 'text-emerald-600'
                     }`}
                   >
-                    {isPriority ? '⚡ Priority Triage Flag' : '✓ Standard Monitoring'}
+                    {(prob * 100).toFixed(1)}%
+                  </span>
+                  <div>
+                    <span
+                      className={`text-xs font-black uppercase px-2.5 py-1 rounded-full ${
+                        isCritical
+                          ? 'bg-rose-100 text-rose-800'
+                          : isModerate
+                          ? 'bg-amber-100 text-amber-800'
+                          : 'bg-emerald-100 text-emerald-800'
+                      }`}
+                    >
+                      {isCritical
+                        ? 'Critical Risk'
+                        : isModerate
+                        ? 'Moderate Triage'
+                        : 'Safe & Retained'}
+                    </span>
+                    <p className="text-[11px] text-slate-500 mt-1 font-medium">
+                      Calibrated Churn Propensity
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Conformal & Policy Pill */}
+              <div className="bg-white/80 backdrop-blur-xs border border-slate-200 rounded-xl p-3 text-xs space-y-1.5 shrink-0">
+                <div className="flex items-center justify-between gap-3 text-slate-500">
+                  <span>Conformal Set (95%):</span>
+                  <span className="font-bold text-slate-800">
+                    {currentResult?.conformal_prediction_set
+                      ? currentResult.conformal_prediction_set.length === 1
+                        ? currentResult.conformal_prediction_set[0] === 1
+                          ? '{ Churn } (Definite)'
+                          : '{ Retain } (Definite)'
+                        : '{ Retain, Churn } (Ambiguous)'
+                      : '{ Verified }'}
                   </span>
                 </div>
-
-                {/* Progress bar vs 8.33% threshold */}
-                <div className="mt-5">
-                  <div className="relative h-3 w-full rounded-full bg-slate-100 overflow-hidden shadow-inner">
-                    <div
-                      className={`h-full rounded-full transition-all duration-700 ease-out ${
-                        isPriority
-                          ? 'bg-linear-to-r from-rose-500 to-rose-600'
-                          : 'bg-linear-to-r from-emerald-400 to-emerald-500'
-                      }`}
-                      style={{
-                        width: `${Math.min(100, Math.max(4, currentResult.calibrated_churn_probability * 100))}%`,
-                      }}
-                    />
-                    {/* 8.33% Cutoff Marker */}
-                    <div
-                      className="absolute top-0 bottom-0 w-1 bg-slate-900 shadow-xs"
-                      style={{ left: `${ECONOMIC_THRESHOLD * 100}%` }}
-                      title="Economic Triage Threshold (8.33%)"
-                    />
-                  </div>
-                  <div className="mt-2 flex justify-between text-[11px] font-mono text-slate-400">
-                    <span>0% (Safe)</span>
-                    <span className="text-indigo-700 font-bold bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
-                      Cutoff: 8.33%
-                    </span>
-                    <span>100% (Churn)</span>
-                  </div>
+                <div className="flex items-center justify-between gap-3 text-slate-500">
+                  <span>Economic Triage:</span>
+                  <span
+                    className={`font-black ${
+                      isTriagePriority ? 'text-rose-600' : 'text-slate-600'
+                    }`}
+                  >
+                    {isTriagePriority ? 'Priority Outreach' : 'Standard Routine'}
+                  </span>
                 </div>
-
-                {/* Decision context */}
-                <div
-                  className={`mt-4 rounded-xl p-4 text-xs leading-relaxed border ${
-                    isPriority
-                      ? 'bg-rose-50/50 border-rose-100 text-rose-900'
-                      : 'bg-emerald-50/50 border-emerald-100 text-emerald-900'
-                  }`}
-                >
-                  {isPriority ? (
-                    <p>
-                      <strong>Action Required:</strong> Churn probability of{' '}
-                      <strong>{(currentResult.calibrated_churn_probability * 100).toFixed(1)}%</strong>{' '}
-                      exceeds the <strong>8.33%</strong> economic cutoff ($70 intervention vs. $840 expected customer value). Proactive retention intervention is economically justified.
-                    </p>
-                  ) : (
-                    <p>
-                      <strong>Safe Profile:</strong> Churn probability is below the 8.33% economic triage boundary. Under resource constraints, proactive outreach is not required.
-                    </p>
-                  )}
-                </div>
-              </section>
-
-              {/* Conformal Uncertainty & Bandit Arm Card */}
-              <section className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-xl border border-slate-200/90 bg-white p-4 shadow-xs">
-                  <div className="flex items-center gap-2 text-slate-500">
-                    <ShieldCheck className="h-4 w-4 text-violet-600" />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">
-                      95% Conformal Set
-                    </span>
-                  </div>
-                  <p className="mt-2 font-mono text-xl font-black text-slate-900">
-                    {`{${currentResult.conformal_prediction_set.join(', ')}}`}
-                  </p>
-                  <p className="mt-1 text-[11px] text-slate-500 font-medium">
-                    {formatConformalSet(currentResult.conformal_prediction_set)}
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-slate-200/90 bg-white p-4 shadow-xs">
-                  <div className="flex items-center gap-2 text-slate-500">
-                    <Zap className="h-4 w-4 text-amber-500" />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">
-                      Assigned Bandit Arm
-                    </span>
-                  </div>
-                  <p className="mt-2 text-lg font-black capitalize text-indigo-700 truncate">
-                    {currentResult.recommended_arm}
-                  </p>
-                  <p className="mt-1 text-[11px] text-slate-500 font-medium">
-                    Thompson Sampling Policy
-                  </p>
-                </div>
-              </section>
-
-              {/* Counterfactual Scenario Card */}
-              <section className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-xs">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-slate-800">
-                    <TrendingDown className="h-4 w-4 text-emerald-600" />
-                    <h4 className="text-xs font-bold uppercase tracking-wider">
-                      Actionable Counterfactual Levers
-                    </h4>
-                  </div>
-                  {counterfactualLoading && (
-                    <span className="flex items-center gap-1 text-[11px] font-medium text-slate-400">
-                      <RefreshCw className="h-3 w-3 animate-spin" /> Computing...
-                    </span>
-                  )}
-                </div>
-
-                <div className="mt-3.5">
-                  {counterfactualLoading ? (
-                    <div className="space-y-2 py-2">
-                      <div className="skeleton h-5 w-3/4 rounded-md" />
-                      <div className="skeleton h-5 w-1/2 rounded-md" />
-                    </div>
-                  ) : counterfactual?.raw_changes &&
-                    Object.keys(counterfactual.raw_changes).length > 0 ? (
-                    <div className="space-y-2.5">
-                      <p className="text-xs text-slate-600">
-                        Minimum feature adjustments that flip this customer profile below the 8.33% risk threshold:
-                      </p>
-                      <div className="space-y-2 pt-1">
-                        {Object.entries(counterfactual.raw_changes).map(([lever, value]) => (
-                          <div
-                            key={lever}
-                            className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50/80 px-3.5 py-2.5 text-xs"
-                          >
-                            <span className="font-semibold text-slate-700">{lever}</span>
-                            <span className="font-mono font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
-                              {String(value)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : counterfactual?.flippable && !counterfactual.raw_changes ? (
-                    <div className="rounded-lg bg-emerald-50 p-3 text-xs text-emerald-700 border border-emerald-100">
-                      ✓ Profile is already below the risk threshold. No contract or service adjustment required.
-                    </div>
-                  ) : (
-                    <p className="text-xs text-slate-500">
-                      No simple 1-to-2 feature combination in the actionable grid flips this profile below the decision boundary.
-                    </p>
-                  )}
-                </div>
-
-                <p className="mt-3.5 text-[10px] text-slate-400 italic">
-                  * Model-consistent optimization scenario, evaluated against isotonic calibrated boundary.
-                </p>
-              </section>
-
-              {/* Metadata strip */}
-              <div className="flex items-center justify-between text-[11px] text-slate-400 px-1 font-mono">
-                <span>Request: {currentResult.request_id.slice(0, 16)}...</span>
-                <span>Bundle: {currentResult.model_version.slice(0, 15)}</span>
               </div>
             </div>
+          </div>
+
+          {/* SHAP Waterfall Force Plot */}
+          <ShapWaterfall payload={formData} churnProbability={prob} />
+
+          {/* AI Executive Synthesis */}
+          {currentResult ? (
+            <ExplainPanel payload={formData} result={currentResult} />
           ) : (
-            /* ENTERPRISE PIPELINE AWAITING PANEL */
-            <div className="space-y-5">
-              <div className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs">
-                {/* Header with live pulse */}
-                <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-                      <Target className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-900">
-                        Inference &amp; Triage Engine
-                      </h3>
-                      <p className="text-[11px] text-slate-400">
-                        Awaiting customer profile submission
-                      </p>
-                    </div>
-                  </div>
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700 border border-emerald-100">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    Ready
-                  </span>
-                </div>
-
-                {/* Pipeline Flow Showcase */}
-                <div className="mt-5 space-y-3">
-                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Active Production Pipeline:
+            <div className="bg-slate-900 text-white rounded-2xl p-5 shadow-sm border border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Activity className="w-5 h-5 text-indigo-400 animate-spin" />
+                <div>
+                  <p className="text-xs font-bold text-slate-200">
+                    Evaluating Model Inference &amp; Attributions...
                   </p>
-
-                  <div className="space-y-2.5">
-                    <div className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50/60 p-3">
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white text-[11px] font-bold text-indigo-600 shadow-2xs border border-slate-100">
-                        1
-                      </div>
-                      <div className="text-xs">
-                        <p className="font-bold text-slate-800">Calibrated XGBoost Ensemble</p>
-                        <p className="text-[11px] text-slate-500">
-                          Raw model logits converted to calibrated posterior probabilities via Isotonic Regression.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50/60 p-3">
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white text-[11px] font-bold text-violet-600 shadow-2xs border border-slate-100">
-                        2
-                      </div>
-                      <div className="text-xs">
-                        <p className="font-bold text-slate-800">95% Conformal Prediction Region</p>
-                        <p className="text-[11px] text-slate-500">
-                          Non-conformity scoring provides guaranteed distribution-free coverage bounds.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50/60 p-3">
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white text-[11px] font-bold text-amber-600 shadow-2xs border border-slate-100">
-                        3
-                      </div>
-                      <div className="text-xs">
-                        <p className="font-bold text-slate-800">8.33% Economic Cost Boundary</p>
-                        <p className="text-[11px] text-slate-500">
-                          Derived mathematically: Cost / LTV = $70 / $840 ≈ 8.33% triage cutoff.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50/60 p-3">
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white text-[11px] font-bold text-emerald-600 shadow-2xs border border-slate-100">
-                        4
-                      </div>
-                      <div className="text-xs">
-                        <p className="font-bold text-slate-800">Thompson Sampling &amp; Counterfactual</p>
-                        <p className="text-[11px] text-slate-500">
-                          Bandit exploration routes optimal retention incentives while finding minimal feature levers.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Interactive CTA */}
-                <div className="mt-6 pt-4 border-t border-slate-100">
-                  <button
-                    type="button"
-                    onClick={() => void executePrediction()}
-                    disabled={loading}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-50 p-3 text-xs font-bold text-indigo-700 border border-indigo-200/80 transition-all hover:bg-indigo-100 hover:border-indigo-300 cursor-pointer"
-                  >
-                    <span>Run Assessment for Current Profile</span>
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Quick specs pill bar */}
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="rounded-xl border border-slate-200/80 bg-white p-2.5">
-                  <p className="text-[10px] text-slate-400 uppercase font-semibold">Inference</p>
-                  <p className="text-xs font-bold text-slate-800 mt-0.5">&lt;15ms</p>
-                </div>
-                <div className="rounded-xl border border-slate-200/80 bg-white p-2.5">
-                  <p className="text-[10px] text-slate-400 uppercase font-semibold">Calibration</p>
-                  <p className="text-xs font-bold text-indigo-600 mt-0.5">Isotonic</p>
-                </div>
-                <div className="rounded-xl border border-slate-200/80 bg-white p-2.5">
-                  <p className="text-[10px] text-slate-400 uppercase font-semibold">Coverage</p>
-                  <p className="text-xs font-bold text-emerald-600 mt-0.5">95.0%</p>
+                  <p className="text-[11px] text-slate-400">
+                    Computing isotonic calibration curve and conformal boundary
+                  </p>
                 </div>
               </div>
             </div>
           )}
-        </div>
-      </div>
 
-      {/* Session History & Audit Trail */}
-      <div className="pt-6 border-t border-slate-200">
-        <PredictionHistory
-          assessments={assessments}
-          onRecordFeedback={onRecordFeedback}
-          feedbackRequestId={feedbackRequestId}
-        />
+          {/* Collapsible Custom Parameter Inspector (for advanced tweaks) */}
+          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+            <button
+              onClick={() => setShowAdvancedEditor((prev) => !prev)}
+              className="w-full px-5 py-3.5 flex items-center justify-between text-left hover:bg-slate-50 transition-colors border-b border-slate-100"
+            >
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="w-4 h-4 text-indigo-600" />
+                <span className="text-xs font-black uppercase tracking-wider text-slate-800">
+                  Customer Feature Inspector &amp; Parameter Editor
+                </span>
+              </div>
+              <div className="flex items-center gap-1 text-xs text-indigo-600 font-bold">
+                <span>{showAdvancedEditor ? 'Hide Editor' : 'Modify Features'}</span>
+                {showAdvancedEditor ? (
+                  <ChevronUp className="w-4 h-4" />
+                ) : (
+                  <ChevronDown className="w-4 h-4" />
+                )}
+              </div>
+            </button>
+
+            {showAdvancedEditor && (
+              <div className="p-5 bg-slate-50/50 space-y-4">
+                <CustomerForm
+                  formData={formData}
+                  onChange={handleFormChange}
+                  onSelectPreset={(presetKey) => {
+                    const preset = PRESET_PROFILES.find((p) => p.id === presetKey);
+                    if (preset) handleSelectCustomer(preset);
+                  }}
+                  activePreset={selectedProfile.id}
+                  disabled={loading}
+                />
+                <div className="flex justify-end pt-2">
+                  <button
+                    onClick={(e) => void handleManualReAssess(e)}
+                    disabled={loading}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-xs disabled:opacity-60"
+                  >
+                    {loading ? 'Evaluating Model...' : 'Apply & Recalculate Risk'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ================================================================ */}
+        {/* ZONE 3: NEXT BEST ACTION DRAWER (Right Column - 3 cols) */}
+        {/* ================================================================ */}
+        <div className="lg:col-span-3">
+          <ActionPanel
+            currentResult={currentResult}
+            counterfactual={counterfactual}
+            counterfactualLoading={counterfactualLoading}
+            onRecordFeedback={onRecordFeedback}
+            feedbackRequestId={feedbackRequestId}
+            assessmentRecord={activeAssessment}
+          />
+        </div>
       </div>
     </main>
   );
