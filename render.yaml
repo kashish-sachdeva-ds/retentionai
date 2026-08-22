@@ -23,10 +23,9 @@ services:
   # ---------------------------------------------------------------------------
   # 2. RetentionAI React 19 Frontend Static Site
   # ---------------------------------------------------------------------------
-  - type: web
+  - type: static
     name: retentionai-web
     runtime: static
-    plan: free
     rootDir: frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
