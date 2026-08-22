@@ -23,7 +23,7 @@ services:
   # ---------------------------------------------------------------------------
   # 2. RetentionAI React 19 Frontend Static Site
   # ---------------------------------------------------------------------------
-  - type: static
+  - type: web
     name: retentionai-web
     runtime: static
     rootDir: frontend
