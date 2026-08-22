@@ -66,6 +66,7 @@ jobs:
         env:
           REDIS_HOST: localhost
           ALLOW_SYNTHETIC_DATA: "1"
+          FORCE_RETRAIN: "1"
 
   docker-build:
     needs: test

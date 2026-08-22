@@ -1,0 +1,4 @@
+# Force binary (no line-ending conversion) for model artifacts
+# to preserve SHA256 integrity hashes across Windows/Linux.
+models/**/*.json binary
+models/**/*.joblib binary
