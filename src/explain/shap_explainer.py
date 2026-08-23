@@ -73,3 +73,48 @@ def verify_additivity(explainer, model, instance: pd.DataFrame) -> dict:
         "actual_margin": actual_margin,
         "matches": bool(np.isclose(reconstructed, actual_margin, atol=1e-4)),
     }
+
+
+SHAP_STORE: dict[str, dict] = {}
+
+
+def compute_and_store_shap(
+    request_id: str,
+    explainer,
+    instance: pd.DataFrame,
+    feature_names: list,
+    redis_client=None,
+) -> None:
+    """Asynchronous background task to compute full exact TreeExplainer SHAP values without blocking /predict."""
+    try:
+        contributions = explain_prediction(explainer, instance, feature_names)
+        shap_list = [
+            {"feature": str(row["feature"]), "shap_value": round(float(row["shap_value"]), 4)}
+            for _, row in contributions.head(8).iterrows()
+        ]
+        payload = {"status": "ready", "request_id": request_id, "contributions": shap_list}
+        SHAP_STORE[request_id] = payload
+        if redis_client is not None:
+            try:
+                import json
+                redis_client.set(f"shap:{request_id}", json.dumps(payload), ex=3600)
+            except Exception:
+                pass
+    except Exception:
+        SHAP_STORE[request_id] = {"status": "failed", "request_id": request_id, "contributions": []}
+
+
+def get_stored_shap(redis_client, request_id: str) -> dict | None:
+    """Retrieve asynchronously computed SHAP values from memory or Redis."""
+    if request_id in SHAP_STORE:
+        return SHAP_STORE[request_id]
+    if redis_client is not None:
+        try:
+            import json
+            val = redis_client.get(f"shap:{request_id}")
+            if val:
+                return json.loads(val)
+        except Exception:
+            pass
+    return None
+

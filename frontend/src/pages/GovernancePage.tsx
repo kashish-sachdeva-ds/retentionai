@@ -183,7 +183,7 @@ export function GovernancePage() {
 
                   <div className="grid grid-cols-2 gap-4 border-t border-slate-100 pt-3">
                     <div>
-                      <div className="text-[11px] text-slate-500">Conformal Set (95% CI):</div>
+                      <div className="text-[11px] text-slate-500">95% Conformal Prediction Set:</div>
                       <div className="font-mono text-base font-bold text-slate-900">
                         {`{${selectedAudit.conformal_set.join(', ')}}`}
                       </div>
@@ -442,7 +442,7 @@ export function GovernancePage() {
                     <td className="py-3 px-3 text-slate-500 font-sans">{v.created_at.slice(0, 10)}</td>
                     <td className="py-3 px-3 font-sans">
                       {v.is_current ? (
-                        <span className="font-bold text-emerald-700">Production Champion</span>
+                        <span className="font-bold text-emerald-700">Active Serving Champion</span>
                       ) : (
                         <span className="text-slate-500">Archived</span>
                       )}
