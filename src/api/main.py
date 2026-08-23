@@ -952,8 +952,13 @@ def run_scenario(scenario: ScenarioRequest):
         "uncertainty_adj": scenario.uncertainty_weight,
     }
 
-    # Use current queue (already scored) for allocation
-    allocation = allocate_budget(state.queue, scenario.budget, scenario.objective)
+    # Use current queue with custom weights for allocation
+    allocation = allocate_budget(
+        state.queue,
+        scenario.budget,
+        scenario.objective,
+        custom_weights=custom_weights,
+    )
 
     return {
         "budget": allocation.budget,

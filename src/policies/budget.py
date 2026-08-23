@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from src.policies.priority import CustomerPriority, DEFAULT_WEIGHTS
+from src.policies.priority import CustomerPriority, DEFAULT_WEIGHTS, compute_priority_score
 
 
 Objective = Literal["risk_first", "value_aware", "balanced"]
@@ -81,18 +81,44 @@ def allocate_budget(
     customers: list[CustomerPriority],
     budget: int,
     objective: Objective = "balanced",
+    custom_weights: dict | None = None,
 ) -> AllocationResult:
     """Select the top-N customers to contact within the given budget.
 
     The allocation is a simple top-K selection after sorting by the
-    objective-specific criterion.  This is intentionally NOT a knapsack
-    optimisation — the diagnostic call cost is constant per ADR-002
-    ($70 per call), so the optimal allocation is always the top-K by
-    the chosen ranking metric.
+    objective-specific criterion. If custom weights are provided for
+    the balanced objective, priority scores are dynamically re-evaluated.
     """
-    sorted_customers = sorted(customers, key=_sort_key(objective))
-    actual_budget = min(budget, len(sorted_customers))
+    if custom_weights and objective == "balanced":
+        rescored = []
+        for c in customers:
+            new_p = compute_priority_score(
+                c.calibrated_probability,
+                c.uncertainty,
+                c.customer_value,
+                c.exit_sensitivity,
+                c.contactability,
+                weights=custom_weights,
+            )
+            item = CustomerPriority(
+                customer_id=c.customer_id,
+                calibrated_probability=c.calibrated_probability,
+                conformal_set=c.conformal_set,
+                uncertainty=c.uncertainty,
+                customer_value=c.customer_value,
+                exit_sensitivity=c.exit_sensitivity,
+                contactability=c.contactability,
+                priority=new_p,
+                recommended_action=c.recommended_action,
+                decision_confidence=c.decision_confidence,
+                above_economic_threshold=c.above_economic_threshold,
+            )
+            rescored.append(item)
+        sorted_customers = sorted(rescored, key=lambda c: -c.priority.priority_score)
+    else:
+        sorted_customers = sorted(customers, key=_sort_key(objective))
 
+    actual_budget = min(budget, len(sorted_customers))
     selected = sorted_customers[:actual_budget]
     not_selected = sorted_customers[actual_budget:]
 

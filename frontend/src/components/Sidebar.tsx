@@ -36,7 +36,6 @@ export function Sidebar({ isOpen, onClose, health }: SidebarProps) {
           <div>
             <div className="flex items-center gap-1.5">
               <span className="font-bold tracking-tight text-slate-900">RetentionAI</span>
-              <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700">v2.0</span>
             </div>
             <p className="text-[11px] font-medium text-slate-400">Decision Intelligence Platform</p>
           </div>

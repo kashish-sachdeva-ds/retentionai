@@ -1,17 +1,31 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
+  ArrowRight,
+  CheckCircle2,
+  ChevronRight,
+  DollarSign,
+  HelpCircle,
   Play,
   RotateCcw,
+  ShieldAlert,
+  Sliders,
+  Sparkles,
+  TrendingUp,
+  Users,
 } from 'lucide-react';
 import { compareBudgetStrategies, runScenario } from '../api';
-import type { StrategyComparisonData } from '../types';
+import type { ScenarioResponseData, StrategyComparisonData } from '../types';
 
 export function ScenarioLabPage() {
+  const navigate = useNavigate();
   const [budget, setBudget] = useState(100);
   const [objective, setObjective] = useState<'balanced' | 'risk_first' | 'value_aware'>('balanced');
   const [comparison, setComparison] = useState<StrategyComparisonData | null>(null);
+  const [scenarioResult, setScenarioResult] = useState<ScenarioResponseData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [appliedNotification, setAppliedNotification] = useState(false);
 
   // Policy Sandbox Weights
   const [riskWeight, setRiskWeight] = useState(51);
@@ -25,7 +39,7 @@ export function ScenarioLabPage() {
   const runSimulation = async () => {
     setLoading(true);
     try {
-      const [compRes] = await Promise.allSettled([
+      const [compRes, scenRes] = await Promise.allSettled([
         compareBudgetStrategies(budget),
         runScenario({
           budget,
@@ -37,7 +51,12 @@ export function ScenarioLabPage() {
           uncertainty_weight: uncertWeight / 100,
         }),
       ]);
+
       if (compRes.status === 'fulfilled') setComparison(compRes.value);
+      if (scenRes.status === 'fulfilled') setScenarioResult(scenRes.value);
+
+      setAppliedNotification(true);
+      setTimeout(() => setAppliedNotification(false), 3000);
     } finally {
       setLoading(false);
     }
@@ -208,7 +227,10 @@ export function ScenarioLabPage() {
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xs sm:p-8 space-y-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-4">
           <div>
-            <h3 className="font-bold text-slate-900">Policy Sandbox — Weight Calibration</h3>
+            <div className="flex items-center gap-2">
+              <Sliders className="h-4 w-4 text-indigo-600" />
+              <h3 className="font-bold text-slate-900">Policy Sandbox — Weight Calibration</h3>
+            </div>
             <p className="text-xs text-slate-500">
               Customize the operational importance of each factor to match organizational retention priorities.
             </p>
@@ -219,7 +241,7 @@ export function ScenarioLabPage() {
             </span>
             <button
               onClick={resetWeights}
-              className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:underline"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:underline cursor-pointer"
             >
               <RotateCcw className="h-3 w-3" />
               <span>Reset Defaults</span>
@@ -332,19 +354,173 @@ export function ScenarioLabPage() {
           </div>
         </div>
 
-        <div className="flex justify-end">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+          {appliedNotification ? (
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
+              <CheckCircle2 className="h-4 w-4" />
+              <span>Weights successfully re-evaluated against population!</span>
+            </div>
+          ) : (
+            <span className="text-xs text-slate-400">
+              Click apply to re-rank the population and recompute expected value.
+            </span>
+          )}
+
           <button
             onClick={runSimulation}
             disabled={loading}
-            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 transition"
+            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 transition cursor-pointer"
           >
-            <Play className="h-3.5 w-3.5" />
-            <span>Apply Weights &amp; Re-run Simulation</span>
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                <span>Simulating...</span>
+              </span>
+            ) : (
+              <>
+                <Play className="h-3.5 w-3.5" />
+                <span>Apply Weights &amp; Re-run Simulation</span>
+              </>
+            )}
           </button>
         </div>
       </section>
 
-      {/* 3. Scientific Caution Box */}
+      {/* 3. Live Simulation Outcome & Selected Candidates */}
+      {scenarioResult && (
+        <section className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-amber-500" />
+                <h2 className="text-base font-bold text-slate-900">
+                  Simulation Outcome &amp; Impact ({scenarioResult.budget} Calls Allocation)
+                </h2>
+              </div>
+              <p className="text-xs text-slate-500">
+                Aggregate projected performance under your customized weights ({riskWeight}% Risk, {valueWeight}% Value, {exitWeight}% Exit, {contactWeight}% Contact, {uncertWeight}% Uncert)
+              </p>
+            </div>
+          </div>
+
+          {/* Metric Tiles */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-xs font-medium text-slate-500">Revenue at Risk</span>
+                <DollarSign className="h-4 w-4 text-emerald-600" />
+              </div>
+              <p className="mt-2 font-mono text-2xl font-black text-slate-900">
+                ${scenarioResult.estimated_revenue_at_risk.toLocaleString()}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-400">Protected annual subscriber revenue</p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-xs font-medium text-slate-500">Mean Churn Risk</span>
+                <TrendingUp className="h-4 w-4 text-rose-500" />
+              </div>
+              <p className="mt-2 font-mono text-2xl font-black text-slate-900">
+                {(scenarioResult.avg_risk * 100).toFixed(1)}%
+              </p>
+              <p className="mt-1 text-[11px] text-slate-400">Calibrated risk of targeted group</p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-xs font-medium text-slate-500">High Risk Targeted</span>
+                <ShieldAlert className="h-4 w-4 text-amber-500" />
+              </div>
+              <p className="mt-2 font-mono text-2xl font-black text-slate-900">
+                {scenarioResult.high_risk_covered} / {scenarioResult.budget}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-400">Subscribers with P(churn) &gt; 80%</p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-xs font-medium text-slate-500">Ambiguous Cases</span>
+                <HelpCircle className="h-4 w-4 text-indigo-500" />
+              </div>
+              <p className="mt-2 font-mono text-2xl font-black text-slate-900">
+                {scenarioResult.uncertain_cases}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-400">Conformal set {'{0, 1}'} (Human review)</p>
+            </div>
+          </div>
+
+          {/* Top Target Candidates Table */}
+          <div className="rounded-3xl border border-slate-200 bg-white shadow-xs overflow-hidden">
+            <div className="flex items-center justify-between border-b border-slate-100 p-5">
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-indigo-600" />
+                <h3 className="text-sm font-bold text-slate-900">
+                  Top Priority Targets Under Simulated Policy (Showing First 10)
+                </h3>
+              </div>
+              <button
+                onClick={() => navigate('/queue')}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:underline"
+              >
+                <span>View Full Queue</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="border-b border-slate-100 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  <tr>
+                    <th className="py-3.5 px-5">Rank</th>
+                    <th className="py-3.5 px-5">Customer ID</th>
+                    <th className="py-3.5 px-5">Calibrated Risk</th>
+                    <th className="py-3.5 px-5">Annual Value</th>
+                    <th className="py-3.5 px-5">Simulated Priority Score</th>
+                    <th className="py-3.5 px-5">Policy Action</th>
+                    <th className="py-3.5 px-5 text-right">Dossier</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {scenarioResult.top_selected.slice(0, 10).map((customer, index) => (
+                    <tr key={customer.customer_id} className="hover:bg-slate-50/80 transition">
+                      <td className="py-3.5 px-5 font-mono text-slate-400 font-medium">#{index + 1}</td>
+                      <td className="py-3.5 px-5 font-mono font-bold text-slate-900">{customer.customer_id}</td>
+                      <td className="py-3.5 px-5">
+                        <span className="font-mono font-bold text-rose-600">
+                          {(customer.calibrated_probability * 100).toFixed(1)}%
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-5 font-mono text-emerald-700 font-semibold">
+                        ${customer.customer_value.toFixed(0)}/yr
+                      </td>
+                      <td className="py-3.5 px-5 font-mono font-bold text-indigo-600">
+                        {customer.priority.score.toFixed(1)} / 100
+                      </td>
+                      <td className="py-3.5 px-5">
+                        <span className="inline-flex rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700">
+                          {customer.recommended_action}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-5 text-right">
+                        <button
+                          onClick={() => navigate(`/customer/${customer.customer_id}`)}
+                          className="inline-flex items-center gap-1 font-semibold text-indigo-600 hover:text-indigo-800"
+                        >
+                          <span>Review 360</span>
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* 4. Scientific Caution Box */}
       <footer className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
         <div className="flex items-start gap-3">
           <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
