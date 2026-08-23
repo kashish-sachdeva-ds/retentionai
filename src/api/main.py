@@ -381,6 +381,7 @@ def root_health():
 
 # Versioned API router — all domain endpoints live under /api/v1
 v1 = APIRouter(prefix="/api/v1")
+v1.add_api_route("/health", root_health, methods=["GET"], tags=["Operations"], summary="API v1 health check")
 
 # CORS Middleware — allow configured origins plus any *.onrender.com and *.vercel.app deployment domain
 app.add_middleware(
@@ -1335,12 +1336,6 @@ app.include_router(v1)
 def root_redirect():
     """Redirect API root to interactive documentation."""
     return RedirectResponse(url="/docs")
-
-
-@app.get("/health", include_in_schema=False)
-def root_health():
-    """Root health check alias for cloud load balancers and orchestrators."""
-    return health()
 
 
 @app.get("/metrics", tags=["Operations"], summary="Prometheus metrics")

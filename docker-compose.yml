@@ -20,9 +20,11 @@ services:
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - ALLOW_SYNTHETIC_DATA=${ALLOW_SYNTHETIC_DATA:-0}
+      - ALLOW_SYNTHETIC_DATA=${ALLOW_SYNTHETIC_DATA:-1}
       - FORCE_RETRAIN=${FORCE_RETRAIN:-0}
       - ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://localhost:8000
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
     volumes:
       - ./src:/app/src
       - ./data:/app/data
@@ -31,11 +33,11 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 30s
+      start_period: 25s
 
   frontend:
     build:
