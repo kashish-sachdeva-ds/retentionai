@@ -15,7 +15,10 @@ TEST_DB = 15  # isolated from db=0, which the live API and its dev instance use
 
 @pytest.fixture
 def redis_client():
-    client = redis.Redis(host="localhost", port=6379, db=TEST_DB, decode_responses=True)
+    client = redis.Redis(
+        host="localhost", port=6379, db=TEST_DB, decode_responses=True,
+        socket_connect_timeout=0.25, socket_timeout=0.25,
+    )
     try:
         client.ping()
         client.flushdb()
@@ -38,7 +41,10 @@ def test_update_persists_and_is_visible_to_a_second_independent_client(redis_cli
     multiple worker processes must see the SAME arm statistics."""
     update_arm_redis(redis_client, "discount", reward=1)
 
-    second_client = redis.Redis(host="localhost", port=6379, db=TEST_DB, decode_responses=True)
+    second_client = redis.Redis(
+        host="localhost", port=6379, db=TEST_DB, decode_responses=True,
+        socket_connect_timeout=0.25, socket_timeout=0.25,
+    )
     alpha, beta = get_arm_posterior(second_client, "discount")
     assert (alpha, beta) == (2.0, 1.0)
 
