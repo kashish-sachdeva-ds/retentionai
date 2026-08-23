@@ -21,6 +21,7 @@ COPY pyproject.toml README.md requirements.txt ./
 COPY src/ ./src/
 COPY models/ ./models/
 COPY data/ ./data/
+COPY scripts/ ./scripts/
 
 # Install Python requirements and package
 RUN pip install --no-cache-dir --default-timeout=100 -e .
