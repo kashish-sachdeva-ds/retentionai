@@ -17,9 +17,10 @@ WORKDIR /app
 COPY pyproject.toml README.md requirements.txt ./
 RUN pip install --no-cache-dir --default-timeout=100 -r requirements.txt
 
-# Copy source code and models directory
+# Copy source code, models directory, and data directory
 COPY src/ ./src/
 COPY models/ ./models/
+COPY data/ ./data/
 
 # Set ownership to non-root user
 RUN chown -R appuser:appuser /app
