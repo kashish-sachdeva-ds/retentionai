@@ -1,13 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  Activity,
   AlertTriangle,
   ArrowRight,
   ChevronRight,
+  FileCheck2,
+  GitBranch,
   ListOrdered,
+  PhoneCall,
   Scale,
+  ShieldAlert,
   ShieldCheck,
   SlidersHorizontal,
+  Sparkles,
 } from 'lucide-react';
 import { getQueueSummary, getQueue, getSystemHealth } from '../api';
 import type { ApiHealth, CustomerPriorityItem, QueueSummary, SystemHealthData } from '../types';
@@ -47,10 +53,93 @@ export function HomePage(_props: HomePageProps) {
   const elevatedRiskCount = summary?.risk_bands?.['80_to_95'] || 684;
   const humanReviewCount = summary?.human_review_required || 418;
 
+  const decisionLoopStages = [
+    {
+      num: '01',
+      name: 'PREDICT',
+      desc: 'XGBoost tree ensemble calculates raw non-linear churn propensity.',
+      badge: 'Stage 8 · Model',
+      icon: Sparkles,
+      color: 'text-indigo-600',
+      bg: 'bg-indigo-50 border-indigo-100',
+      path: '/assessment',
+    },
+    {
+      num: '02',
+      name: 'CALIBRATE',
+      desc: 'Isotonic regression transforms margins into true posterior probabilities (ECE < 0.056).',
+      badge: 'Stage 9 · Calibration',
+      icon: Scale,
+      color: 'text-sky-600',
+      bg: 'bg-sky-50 border-sky-100',
+      path: '/evaluation',
+    },
+    {
+      num: '03',
+      name: 'QUANTIFY UNCERTAINTY',
+      desc: 'Mondrian conformal prediction yields valid 95% marginal coverage sets {0}, {1}, or {0, 1}.',
+      badge: 'Stage 9 · Conformal',
+      icon: ShieldAlert,
+      color: 'text-amber-600',
+      bg: 'bg-amber-50 border-amber-100',
+      path: '/assessment',
+    },
+    {
+      num: '04',
+      name: 'PRIORITIZE',
+      desc: '4-factor knapsack scoring ranks subscribers by Risk × Revenue × Exit Sensitivity.',
+      badge: 'Stage 10 · Policy',
+      icon: ListOrdered,
+      color: 'text-violet-600',
+      bg: 'bg-violet-50 border-violet-100',
+      path: '/queue',
+    },
+    {
+      num: '05',
+      name: 'ACT',
+      desc: 'Operational recommendation engine outputs high-ROI intervention or triage review.',
+      badge: 'Action Routing',
+      icon: PhoneCall,
+      color: 'text-emerald-600',
+      bg: 'bg-emerald-50 border-emerald-100',
+      path: '/scenarios',
+    },
+    {
+      num: '06',
+      name: 'OBSERVE',
+      desc: 'Thompson Sampling multi-armed bandit records real retention outcome feedback.',
+      badge: 'Stage 11 · Bandit',
+      icon: GitBranch,
+      color: 'text-teal-600',
+      bg: 'bg-teal-50 border-teal-100',
+      path: '/monitoring',
+    },
+    {
+      num: '07',
+      name: 'AUDIT',
+      desc: 'Immutable decision traces and GRC audit records committed to durable database.',
+      badge: 'Durable Storage',
+      icon: FileCheck2,
+      color: 'text-rose-600',
+      bg: 'bg-rose-50 border-rose-100',
+      path: '/governance',
+    },
+    {
+      num: '08',
+      name: 'MONITOR',
+      desc: 'Paired PSI quantile distance + Kolmogorov-Smirnov test track live output drift.',
+      badge: 'Stage 14 · Drift',
+      icon: Activity,
+      color: 'text-indigo-600',
+      bg: 'bg-indigo-50 border-indigo-100',
+      path: '/monitoring',
+    },
+  ];
+
   return (
-    <main className="mx-auto w-full max-w-7xl space-y-8 p-4 sm:p-8">
-      {/* 1. Hero & Strategic Framing */}
-      <section className="relative overflow-hidden rounded-3xl border border-slate-200/80 bg-gradient-to-b from-white via-slate-50/50 to-slate-100/40 p-6 shadow-xs sm:p-8">
+    <main className="mx-auto w-full max-w-7xl space-y-10 p-4 sm:p-8">
+      {/* 1. Hero & Strategic Problem Framing */}
+      <section className="relative overflow-hidden rounded-3xl border border-slate-200/80 bg-linear-to-b from-white via-slate-50/50 to-slate-100/40 p-6 shadow-xs sm:p-8">
         <div className="grid gap-8 lg:grid-cols-[1.3fr_0.9fr] lg:items-center">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-indigo-100 bg-indigo-50/80 px-3 py-1 text-xs font-bold text-indigo-700">
@@ -62,22 +151,22 @@ export function HomePage(_props: HomePageProps) {
               <span className="text-indigo-600">Make every call count.</span>
             </h1>
             <p className="mt-4 text-base leading-7 text-slate-600">
-              When attention is scarce, raw churn predictions aren't enough. RetentionAI translates
-              calibrated probabilities and conformal uncertainty into an optimal operational call list
-              under real retention budget constraints.
+              When attention and retention budgets are scarce, raw churn probabilities aren't enough.
+              RetentionAI translates calibrated risk, Mondrian conformal uncertainty, and economic value
+              into an optimal operational triage list.
             </p>
 
             <div className="mt-6 flex flex-wrap items-center gap-3">
               <button
                 onClick={() => navigate('/queue')}
-                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm shadow-indigo-200 transition hover:bg-indigo-700"
+                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm shadow-indigo-200 transition hover:bg-indigo-700 cursor-pointer"
               >
                 <span>Open Priority Queue</span>
                 <ListOrdered className="h-4 w-4" />
               </button>
               <button
                 onClick={() => navigate('/scenarios')}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 cursor-pointer"
               >
                 <span>Simulate Call Budget</span>
                 <SlidersHorizontal className="h-4 w-4 text-slate-400" />
@@ -117,13 +206,79 @@ export function HomePage(_props: HomePageProps) {
         </div>
       </section>
 
-      {/* 2. System Status Grid */}
-      <section>
-        <div className="flex items-center justify-between pb-3">
+      {/* 2. THE CORE PRODUCT: 8-STAGE CLOSED DECISION LOOP */}
+      <section className="rounded-3xl border border-slate-200 bg-linear-to-b from-white to-slate-50/60 p-6 shadow-xs sm:p-8 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-5">
+          <div>
+            <div className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 text-white font-black text-xs">
+                ∞
+              </div>
+              <h2 className="text-xl font-extrabold tracking-tight text-slate-900">
+                The Closed Decision Intelligence Loop
+              </h2>
+            </div>
+            <p className="mt-1 text-xs text-slate-500 max-w-2xl">
+              RetentionAI is not an isolated classifier. It is a closed-loop decision system where predictions are calibrated, bounded by uncertainty, prioritized by budget, audited, and continuously monitored against drift.
+            </p>
+          </div>
+
+          <span className="shrink-0 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700">
+            End-to-End System Flow
+          </span>
+        </div>
+
+        {/* Visual Pipeline Grid */}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {decisionLoopStages.map((st) => {
+            const Icon = st.icon;
+            return (
+              <div
+                key={st.name}
+                onClick={() => navigate(st.path)}
+                className="group relative flex flex-col justify-between rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs transition-all hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-md cursor-pointer"
+              >
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-xs font-black text-slate-400 group-hover:text-indigo-600 transition">
+                      {st.num}
+                    </span>
+                    <span className={`rounded px-2 py-0.5 text-[9px] font-bold border ${st.bg} ${st.color}`}>
+                      {st.badge}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2.5">
+                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${st.bg} ${st.color}`}>
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <h3 className="font-black text-sm tracking-tight text-slate-900 group-hover:text-indigo-600 transition">
+                      {st.name}
+                    </h3>
+                  </div>
+
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    {st.desc}
+                  </p>
+                </div>
+
+                <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-2.5 text-[11px] font-semibold text-slate-400 group-hover:text-indigo-600 transition">
+                  <span>Explore Stage</span>
+                  <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* 3. Live Diagnostics Status Grid */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
           <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">Live Trust &amp; Platform Diagnostics</h2>
           <button
             onClick={() => navigate('/monitoring')}
-            className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
           >
             <span>View detailed telemetry</span>
             <ChevronRight className="h-3.5 w-3.5" />
@@ -136,7 +291,7 @@ export function HomePage(_props: HomePageProps) {
             status={systemHealth?.model.status === 'healthy' ? 'Active & Calibrated' : 'Online'}
             metric="XGBoost (Isotonic)"
             sub="PR-AUC 0.619 · Precision@100 57%"
-            badge="Verified Holdout"
+            badge="Active Serving"
             onClick={() => navigate('/evaluation')}
           />
           <StatusCard
@@ -152,7 +307,7 @@ export function HomePage(_props: HomePageProps) {
             status="Mondrian Conformal"
             metric="95.1% Coverage"
             sub="Target: 95% marginal coverage"
-            badge="Guaranteed Exchangeable"
+            badge="Guaranteed Coverage"
             onClick={() => navigate('/evaluation')}
           />
           <StatusCard
@@ -160,13 +315,13 @@ export function HomePage(_props: HomePageProps) {
             status="Output Distribution"
             metric="PSI: 0.038"
             sub="Population Stability Index (<0.10)"
-            badge="No Drift Detected"
+            badge="Stable Distribution"
             onClick={() => navigate('/monitoring')}
           />
         </div>
       </section>
 
-      {/* 3. Priority Queue & Risk Bands Summary */}
+      {/* 4. Priority Queue & Risk Bands Summary */}
       <section className="grid gap-6 lg:grid-cols-[1fr_1.5fr]">
         {/* Left: Risk Breakdown */}
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
@@ -232,7 +387,7 @@ export function HomePage(_props: HomePageProps) {
             </div>
             <button
               onClick={() => navigate('/queue')}
-              className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800"
+              className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 cursor-pointer"
             >
               <span>View all in Queue</span>
               <ArrowRight className="h-3.5 w-3.5" />
@@ -290,7 +445,7 @@ export function HomePage(_props: HomePageProps) {
         </div>
       </section>
 
-      {/* 4. Portfolio Rigor & Transparency Note */}
+      {/* 5. Architectural & Governance Note */}
       <footer className="rounded-2xl border border-slate-200/80 bg-slate-50 p-4 text-xs text-slate-600">
         <div className="flex items-start gap-3">
           <ShieldCheck className="h-5 w-5 text-indigo-600 shrink-0 mt-0.5" />
