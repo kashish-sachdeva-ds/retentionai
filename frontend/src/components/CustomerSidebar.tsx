@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, User, History, Clock } from 'lucide-react';
 import type { PredictionPayload, ScoredAssessment } from '../types';
-import { PRESETS } from './CustomerForm';
+import { PRESETS } from '../presets';
 
 export interface CustomerProfile {
   id: string;
@@ -21,7 +21,7 @@ interface CustomerSidebarProps {
   assessments: ScoredAssessment[];
 }
 
-export const PRESET_PROFILES: CustomerProfile[] = [
+const PRESET_PROFILES: CustomerProfile[] = [
   {
     id: 'atRisk',
     name: 'ACCT-7892 • At-Risk New Subscriber',

@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import pytest
 import redis
@@ -15,15 +16,17 @@ TEST_DB = 15  # isolated from db=0, which the live API and its dev instance use
 
 @pytest.fixture
 def redis_client():
+    host = os.environ.get("REDIS_HOST", "localhost")
+    port = int(os.environ.get("REDIS_PORT", 6379))
     client = redis.Redis(
-        host="localhost", port=6379, db=TEST_DB, decode_responses=True,
-        socket_connect_timeout=0.25, socket_timeout=0.25,
+        host=host, port=port, db=TEST_DB, decode_responses=True,
+        socket_connect_timeout=2.0, socket_timeout=2.0,
     )
     try:
         client.ping()
         client.flushdb()
     except (redis.exceptions.ConnectionError, redis.exceptions.RedisError):
-        pytest.skip("Redis server not available at localhost:6379")
+        pytest.skip(f"Redis server not available at {host}:{port}")
     yield client
     try:
         client.flushdb()

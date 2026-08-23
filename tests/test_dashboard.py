@@ -1,3 +1,4 @@
+import os
 import time
 import redis
 import pytest
@@ -21,7 +22,13 @@ def live_api_server():
     not just an in-process TestClient (which app.py, as an external
     caller, has no way to use)."""
     try:
-        r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+        r = redis.Redis(
+            host=os.environ.get("REDIS_HOST", "localhost"),
+            port=int(os.environ.get("REDIS_PORT", 6379)),
+            db=0,
+            decode_responses=True,
+            socket_connect_timeout=2.0,
+        )
         for key in r.keys("bandit:*") + r.keys("counterfactual:*") + r.keys("monitoring:*"):
             r.delete(key)
     except Exception:
@@ -32,7 +39,7 @@ def live_api_server():
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
 
-    for _ in range(60):
+    for _ in range(120):
         try:
             import requests
             requests.get("http://127.0.0.1:8001/api/v1/health", timeout=1)

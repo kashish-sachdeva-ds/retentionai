@@ -10,7 +10,8 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { ApiError, getCounterfactual, predictCustomer } from '../api';
-import { CustomerForm, PRESETS } from '../components/CustomerForm';
+import { CustomerForm } from '../components/CustomerForm';
+import { PRESETS } from '../presets';
 import { ErrorBanner } from '../components/ErrorBanner';
 import type { CounterfactualResponse, PredictionPayload, PredictionResponse } from '../types';
 
