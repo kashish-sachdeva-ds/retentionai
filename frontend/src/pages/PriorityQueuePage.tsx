@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -166,8 +166,8 @@ export function PriorityQueuePage() {
                   const uncert = getUncertaintyBadge(cust.uncertainty.label);
 
                   return (
+                    <Fragment key={cust.customer_id}>
                     <tr
-                      key={cust.customer_id}
                       className={`group transition hover:bg-slate-50/80 ${isExpanded ? 'bg-indigo-50/30' : ''}`}
                     >
                       {/* Rank & ID */}
@@ -244,6 +244,8 @@ export function PriorityQueuePage() {
                       <td className="py-3.5 pl-2 pr-4 sm:pr-6 text-right">
                         <button
                           onClick={() => setExpandedCustomerId(isExpanded ? null : cust.customer_id)}
+                          aria-expanded={isExpanded}
+                          aria-controls={`priority-rationale-${cust.customer_id}`}
                           className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50"
                         >
                           <span>{isExpanded ? 'Hide' : 'Why?'}</span>
@@ -251,6 +253,51 @@ export function PriorityQueuePage() {
                         </button>
                       </td>
                     </tr>
+                    {isExpanded && (
+                      <tr id={`priority-rationale-${cust.customer_id}`} className="bg-indigo-50/30">
+                        <td colSpan={7} className="px-4 pb-5 pt-1 sm:px-6">
+                          <section className="rounded-xl border border-indigo-100 bg-white p-4 shadow-2xs" aria-label={`Priority rationale for ${cust.customer_id}`}>
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div>
+                                <h2 className="text-sm font-bold text-slate-900">Why this customer is prioritized</h2>
+                                <p className="mt-1 text-xs leading-5 text-slate-600">
+                                  The <span className="font-semibold text-indigo-700">{cust.priority.score.toFixed(1)} / 100</span> priority score combines churn risk, customer value, ease of exit, reachability, and model certainty.
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => navigate(`/customer/${encodeURIComponent(cust.customer_id)}`)}
+                                className="shrink-0 text-left text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline"
+                              >
+                                Open customer dossier
+                              </button>
+                            </div>
+
+                            <dl className="mt-4 grid gap-2 sm:grid-cols-5">
+                              {[
+                                ['Risk', cust.priority.risk_component, '51% weight'],
+                                ['Customer value', cust.priority.value_component, '21% weight'],
+                                ['Exit ease', cust.priority.exit_sensitivity_component, '14% weight'],
+                                ['Reachability', cust.priority.contactability_component, '8% weight'],
+                                ['Certainty', cust.priority.uncertainty_component, '6% weight'],
+                              ].map(([label, component, weight]) => (
+                                <div key={label} className="rounded-lg bg-slate-50 p-2.5">
+                                  <dt className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</dt>
+                                  <dd className="mt-1 font-mono text-sm font-bold text-slate-900">{Number(component).toFixed(1)} pts</dd>
+                                  <p className="mt-0.5 text-[10px] text-slate-400">{weight}</p>
+                                </div>
+                              ))}
+                            </dl>
+
+                            <p className="mt-4 border-t border-slate-100 pt-3 text-xs text-slate-600">
+                              <span className="font-semibold text-slate-800">Current evidence:</span>{' '}
+                              {(cust.calibrated_probability * 100).toFixed(1)}% calibrated churn risk, ${cust.customer_value.toFixed(0)} annual value,{' '}
+                              {cust.uncertainty.human_review_required ? 'and an ambiguous prediction that requires human review.' : `with ${cust.decision_confidence} decision confidence.`}
+                            </p>
+                          </section>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   );
                 })
               )}

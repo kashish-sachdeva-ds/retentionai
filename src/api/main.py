@@ -113,7 +113,9 @@ logger = logging.getLogger(__name__)
 
 RECENT_SCORES_KEY = "monitoring:recent_scores"
 RECENT_SCORES_MAX = 1000
-DRIFT_CHECK_MIN_SAMPLES = 30  # below this, PSI/KS are too noisy on so few points to trust
+# Use one threshold for both the drift endpoint and system health. PSI/KS
+# estimates from a smaller live window are too noisy to report as reliable.
+DRIFT_CHECK_MIN_SAMPLES = 100
 
 ARM_NAMES = ["discount", "technician", "control"]
 ALPHA_CONFORMAL = 0.05
@@ -809,7 +811,7 @@ def check_drift(
     # 1. Compute from durable live prediction events in SQLite
     live_result = compute_live_drift_from_events(
         reference_scores=state.reference_scores,
-        min_samples=100,
+        min_samples=DRIFT_CHECK_MIN_SAMPLES,
         model_version=state.model_version or "unknown",
     )
 
@@ -826,14 +828,14 @@ def check_drift(
         return {
             "status": "benchmark_preview",
             "n_observations": len(benchmark_scores),
-            "minimum_required": 100,
+            "minimum_required": DRIFT_CHECK_MIN_SAMPLES,
             "psi": float(row["psi"]),
             "psi_interpretation": str(row["psi_interpretation"]),
             "ks_statistic": float(row["ks_statistic"]),
             "ks_p_value": float(row["ks_p_value"]),
             "ks_drift_detected": bool(row["ks_drift_detected"]),
             "source_type": "benchmark_holdout",
-            "message": "Preview calculated from holdout queue baseline. For production drift, 100+ live predictions are required.",
+            "message": f"Preview calculated from holdout queue baseline. For production drift, {DRIFT_CHECK_MIN_SAMPLES}+ live predictions are required.",
         }
 
     return live_result

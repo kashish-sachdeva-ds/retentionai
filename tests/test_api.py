@@ -229,7 +229,8 @@ def test_drift_endpoint_reports_ok_after_enough_predictions(client):
     # short-lived Redis list. Keep this test aligned with the API's minimum
     # sample contract (currently 100) instead of the old Redis threshold.
     for _ in range(DRIFT_CHECK_MIN_SAMPLES):
-        client.post("/api/v1/predict", json=SAMPLE_CUSTOMER)
+        prediction = client.post("/api/v1/predict", json=SAMPLE_CUSTOMER)
+        assert prediction.status_code == 200
     response = client.get("/api/v1/monitoring/drift")
     body = response.json()
     assert body["status"] == "ok"
