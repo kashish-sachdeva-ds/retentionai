@@ -29,6 +29,7 @@ dependencies = [
     "streamlit==1.61.1",
     "uvicorn==0.52.2",
     "xgboost==3.4.0",
+    "sqlalchemy>=2.0.0",
 ]
 
 [project.optional-dependencies]

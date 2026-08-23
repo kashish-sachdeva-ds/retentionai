@@ -1,28 +1,27 @@
-"""
-Audit record system for RetentionAI.
+"""Audit record system for RetentionAI with persistent SQLite/PostgreSQL storage.
 
 Every operational decision produces an audit record — a complete,
 immutable snapshot of the decision context: who was assessed, what
 model produced it, what policy was applied, and what was recommended.
 
-This transforms "Can we trust this recommendation?" from a theoretical
-question into a first-class, inspectable product feature.
-
-Records are stored in memory for the portfolio version.  In production,
-these would be persisted to a database with proper retention policies.
+Records are persisted to the database (data/retentionai.db or DATABASE_URL)
+and survive server restarts, page refreshes, and redeployments.
 """
 
 from __future__ import annotations
 
 import datetime
 import json
+import logging
 import threading
 import uuid
-from collections import OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from typing import Any
 
+from src.db.models import AuditRecordModel
+from src.db.session import get_db_session, init_db
 
-MAX_RECORDS = 1000
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -56,7 +55,7 @@ class AuditRecord:
     reviewer: str | None = None
     review_timestamp: str | None = None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "decision_id": self.decision_id,
             "customer_id": self.customer_id,
@@ -84,39 +83,131 @@ class AuditRecord:
 
 
 class AuditStore:
-    """Thread-safe in-memory audit record store."""
+    """Persistent database-backed audit record store with SQLite/PostgreSQL engine."""
 
-    def __init__(self, max_records: int = MAX_RECORDS):
-        self._records: OrderedDict[str, AuditRecord] = OrderedDict()
-        self._max = max_records
+    def __init__(self):
         self._lock = threading.Lock()
 
     def store(self, record: AuditRecord) -> None:
+        """Persist audit record to database."""
         with self._lock:
-            self._records[record.decision_id] = record
-            while len(self._records) > self._max:
-                self._records.popitem(last=False)
+            try:
+                with get_db_session() as session:
+                    model = AuditRecordModel(
+                        decision_id=record.decision_id,
+                        customer_id=record.customer_id,
+                        model_version=record.model_version,
+                        policy_version=record.policy_version,
+                        timestamp=record.timestamp,
+                        calibrated_probability=record.calibrated_probability,
+                        raw_probability=record.raw_probability,
+                        conformal_set_json=json.dumps(record.conformal_set),
+                        economic_threshold=record.economic_threshold,
+                        above_threshold=record.above_threshold,
+                        recommended_action=record.recommended_action,
+                        decision_confidence=record.decision_confidence,
+                        priority_score=record.priority_score,
+                        customer_value=record.customer_value,
+                        uncertainty_state=record.uncertainty_state,
+                        trace_id=record.trace_id,
+                        human_review_status=record.human_review_status,
+                        reviewer=record.reviewer,
+                        review_timestamp=record.review_timestamp,
+                    )
+                    session.merge(model)
+            except Exception as exc:
+                logger.error("Failed to persist audit record %s to database: %s", record.decision_id, exc)
 
     def get(self, decision_id: str) -> AuditRecord | None:
-        with self._lock:
-            return self._records.get(decision_id)
+        """Retrieve audit record by decision ID from database."""
+        try:
+            with get_db_session() as session:
+                row = session.query(AuditRecordModel).filter_by(decision_id=decision_id).first()
+                if not row:
+                    return None
+                return AuditRecord(
+                    decision_id=row.decision_id,
+                    customer_id=row.customer_id,
+                    model_version=row.model_version,
+                    policy_version=row.policy_version,
+                    timestamp=row.timestamp,
+                    calibrated_probability=row.calibrated_probability,
+                    conformal_set=json.loads(row.conformal_set_json) if row.conformal_set_json else [1],
+                    raw_probability=row.raw_probability,
+                    economic_threshold=row.economic_threshold,
+                    above_threshold=row.above_threshold,
+                    recommended_action=row.recommended_action,
+                    decision_confidence=row.decision_confidence,
+                    priority_score=row.priority_score,
+                    customer_value=row.customer_value,
+                    uncertainty_state=row.uncertainty_state,
+                    trace_id=row.trace_id,
+                    human_review_status=row.human_review_status,
+                    reviewer=row.reviewer,
+                    review_timestamp=row.review_timestamp,
+                )
+        except Exception as exc:
+            logger.error("Failed to query audit record %s: %s", decision_id, exc)
+            return None
 
-    def list_recent(self, limit: int = 50) -> list[dict]:
-        with self._lock:
-            items = list(self._records.values())[-limit:]
-            return [r.to_dict() for r in reversed(items)]
+    def list_recent(self, limit: int = 50) -> list[dict[str, Any]]:
+        """List most recent audit records from database."""
+        try:
+            with get_db_session() as session:
+                rows = (
+                    session.query(AuditRecordModel)
+                    .order_by(AuditRecordModel.timestamp.desc())
+                    .limit(limit)
+                    .all()
+                )
+                return [r.to_dict() for r in rows]
+        except Exception as exc:
+            logger.error("Failed to list recent audit records: %s", exc)
+            return []
 
     def count(self) -> int:
-        with self._lock:
-            return len(self._records)
+        """Count total audit records in database."""
+        try:
+            with get_db_session() as session:
+                return session.query(AuditRecordModel).count()
+        except Exception as exc:
+            logger.error("Failed to count audit records: %s", exc)
+            return 0
 
-    def find_by_customer(self, customer_id: str) -> list[dict]:
-        with self._lock:
-            return [
-                r.to_dict()
-                for r in self._records.values()
-                if r.customer_id == customer_id
-            ]
+    def find_by_customer(self, customer_id: str) -> list[dict[str, Any]]:
+        """Find all audit records for a given customer ID."""
+        try:
+            with get_db_session() as session:
+                rows = (
+                    session.query(AuditRecordModel)
+                    .filter_by(customer_id=customer_id)
+                    .order_by(AuditRecordModel.timestamp.desc())
+                    .all()
+                )
+                return [r.to_dict() for r in rows]
+        except Exception as exc:
+            logger.error("Failed to find audit records for customer %s: %s", customer_id, exc)
+            return []
+
+    def update_review_status(
+        self,
+        decision_id: str,
+        status: str,
+        reviewer: str = "human_operator",
+    ) -> bool:
+        """Update review status of a decision (approved, rejected, escalated)."""
+        try:
+            with get_db_session() as session:
+                row = session.query(AuditRecordModel).filter_by(decision_id=decision_id).first()
+                if not row:
+                    return False
+                row.human_review_status = status
+                row.reviewer = reviewer
+                row.review_timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                return True
+        except Exception as exc:
+            logger.error("Failed to update review status for %s: %s", decision_id, exc)
+            return False
 
 
 # Singleton audit store
@@ -136,8 +227,9 @@ def create_audit_record(
     above_threshold: bool,
     trace_id: str | None = None,
     raw_probability: float | None = None,
+    human_review_status: str = "pending",
 ) -> AuditRecord:
-    """Create and store a new audit record."""
+    """Create and store a new persistent audit record."""
     record = AuditRecord(
         decision_id=f"A-{uuid.uuid4().hex[:8].upper()}",
         customer_id=customer_id,
@@ -154,6 +246,7 @@ def create_audit_record(
         customer_value=customer_value,
         uncertainty_state=uncertainty_state,
         trace_id=trace_id,
+        human_review_status=human_review_status,
     )
     audit_store.store(record)
     return record

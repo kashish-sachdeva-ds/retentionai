@@ -64,22 +64,30 @@ export function ModelEvidencePage() {
         <div className="mt-4 grid gap-3 sm:grid-cols-4 text-xs font-mono">
           <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
             <span className="text-[10px] font-bold text-slate-400">1. Train Split</span>
-            <p className="text-base font-bold text-slate-900 mt-1">4,930 rows (70%)</p>
+            <p className="text-base font-bold text-slate-900 mt-1">
+              {(fullCard?.validation as { splits?: { train?: { rows?: number; pct?: number } } })?.splits?.train?.rows?.toLocaleString() || '5,634'} rows ({(fullCard?.validation as { splits?: { train?: { rows?: number; pct?: number } } })?.splits?.train?.pct || 80.0}%)
+            </p>
             <p className="text-[10px] text-slate-500 font-sans mt-1">XGBoost tree fitting only</p>
           </div>
           <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
             <span className="text-[10px] font-bold text-slate-400">2. Calibration Split</span>
-            <p className="text-base font-bold text-slate-900 mt-1">704 rows (10%)</p>
+            <p className="text-base font-bold text-slate-900 mt-1">
+              {(fullCard?.validation as { splits?: { calibration?: { rows?: number; pct?: number } } })?.splits?.calibration?.rows?.toLocaleString() || '470'} rows ({(fullCard?.validation as { splits?: { calibration?: { rows?: number; pct?: number } } })?.splits?.calibration?.pct || 6.7}%)
+            </p>
             <p className="text-[10px] text-slate-500 font-sans mt-1">Isotonic mapping (Frozen)</p>
           </div>
           <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
             <span className="text-[10px] font-bold text-slate-400">3. Conformal Split</span>
-            <p className="text-base font-bold text-slate-900 mt-1">704 rows (10%)</p>
+            <p className="text-base font-bold text-slate-900 mt-1">
+              {(fullCard?.validation as { splits?: { conformal?: { rows?: number; pct?: number } } })?.splits?.conformal?.rows?.toLocaleString() || '470'} rows ({(fullCard?.validation as { splits?: { conformal?: { rows?: number; pct?: number } } })?.splits?.conformal?.pct || 6.7}%)
+            </p>
             <p className="text-[10px] text-slate-500 font-sans mt-1">Mondrian alpha thresholds</p>
           </div>
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4">
             <span className="text-[10px] font-bold text-emerald-800">4. Holdout Split</span>
-            <p className="text-base font-bold text-emerald-950 mt-1">705 rows (10%)</p>
+            <p className="text-base font-bold text-emerald-950 mt-1">
+              {(fullCard?.validation as { splits?: { holdout?: { rows?: number; pct?: number } } })?.splits?.holdout?.rows?.toLocaleString() || '469'} rows ({(fullCard?.validation as { splits?: { holdout?: { rows?: number; pct?: number } } })?.splits?.holdout?.pct || 6.6}%)
+            </p>
             <p className="text-[10px] text-emerald-700 font-sans mt-1">Untouched release metrics</p>
           </div>
         </div>

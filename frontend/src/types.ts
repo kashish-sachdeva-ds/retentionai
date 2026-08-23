@@ -295,14 +295,40 @@ export interface BanditPosteriorResponse {
   arms: BanditArm[];
 }
 
+export interface DriftSnapshot {
+  id?: number;
+  timestamp: string;
+  period_label: string;
+  model_version?: string;
+  reference_version?: string;
+  source_type?: string;
+  psi: number;
+  psi_interpretation: string;
+  ks_statistic: number;
+  ks_p_value: number;
+  ks_drift_detected: boolean;
+  n_samples: number;
+}
+
 export interface DriftResponse {
-  status: 'ok' | 'insufficient_data';
-  n_recent_predictions: number;
+  status: 'ok' | 'insufficient_data' | 'benchmark_preview' | 'error';
+  n_observations?: number;
+  n_recent_predictions?: number;
   minimum_required?: number;
   psi?: number;
   psi_interpretation?: string;
+  ks_statistic?: number;
   ks_p_value?: number;
   ks_drift_detected?: boolean;
+  source_type?: string;
+  message?: string;
+  snapshot?: DriftSnapshot;
+}
+
+export interface DriftHistoryResponse {
+  total_live_prediction_events: number;
+  snapshots_count: number;
+  snapshots: DriftSnapshot[];
 }
 
 export interface EvaluationSlice {

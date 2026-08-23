@@ -41,7 +41,7 @@ from uuid import UUID
 import numpy as np
 import pandas as pd
 import redis
-from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, HTTPException, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -87,7 +87,15 @@ from src.modeling.conformal import (
 )
 from src.modeling.evaluation import build_evaluation_report
 from src.modeling.persistence import load_artifacts, save_artifacts, MODELS_DIR
-from src.monitoring.drift import check_drift_report
+from src.db.session import init_db
+from src.monitoring.drift import (
+    check_drift_report,
+    record_prediction_event,
+    create_drift_snapshot,
+    get_drift_history,
+    count_prediction_events,
+    compute_live_drift_from_events,
+)
 from src.policies.priority import (
     CustomerPriority,
     score_customer,
@@ -168,6 +176,12 @@ def _ensure_serving_provenance(training_data: dict) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 0. Initialize persistent SQLite/PostgreSQL database
+    try:
+        init_db()
+    except Exception as exc:
+        logger.error("Failed to initialize database on startup: %s", exc)
+
     loaded = None if FORCE_RETRAIN else load_artifacts()
 
     if loaded:
@@ -702,6 +716,18 @@ def predict(customer: CustomerRequest, background_tasks: BackgroundTasks, reques
         trace_id=trace.trace_id,
     )
 
+    # Record durable prediction event for time-series drift aggregation
+    record_prediction_event(
+        request_id=request_id,
+        customer_id=customer_id,
+        model_version=state.model_version or "unknown",
+        calibrated_probability=calibrated_prob,
+        raw_probability=raw_prob,
+        conformal_set=sorted_pred_set,
+        recommended_action=priority_assessment.recommended_action,
+        priority_score=priority_assessment.priority.priority_score,
+    )
+
     # Record Prometheus business metric
     MODEL_PREDICTIONS_TOTAL.labels(model_version=state.model_version).inc()
 
@@ -733,38 +759,76 @@ def get_counterfactual(request_id: str):
 
 
 @v1.get("/monitoring/drift", tags=["Monitoring"], summary="Distribution drift report")
-def check_drift(_: bool = Depends(verify_admin_authorization)):
+def check_drift(
+    include_benchmark: bool = Query(False, description="Preview holdout benchmark if live events are insufficient"),
+    _: bool = Depends(verify_admin_authorization),
+):
     """Compares live traffic's calibrated churn-probability distribution
     against the calibration set's reference distribution using PSI and KS tests."""
-    try:
-        recent_raw = redis_client.lrange(RECENT_SCORES_KEY, 0, -1)
-        recent_scores = np.array([float(s) for s in recent_raw])
-    except Exception:
-        recent_scores = np.array([])
+    if state.reference_scores is None:
+        raise HTTPException(status_code=503, detail="Reference scores not loaded")
 
-    if len(recent_scores) < 10:
-        if state.queue:
-            recent_scores = np.array([c.calibrated_probability for c in state.queue[:250]])
-        else:
-            return {
-                "status": "insufficient_data",
-                "n_recent_predictions": len(recent_scores),
-                "minimum_required": DRIFT_CHECK_MIN_SAMPLES,
-            }
+    # 1. Compute from durable live prediction events in SQLite
+    live_result = compute_live_drift_from_events(
+        reference_scores=state.reference_scores,
+        min_samples=100,
+        model_version=state.model_version or "unknown",
+    )
 
-    reference_df = pd.DataFrame({"score": state.reference_scores})
-    current_df = pd.DataFrame({"score": recent_scores})
-    report = check_drift_report(reference_df, current_df, columns=["score"])
-    row = report.iloc[0]
+    if live_result.get("status") == "ok":
+        return live_result
 
+    # 2. If insufficient live data and benchmark preview requested
+    if include_benchmark and state.queue:
+        benchmark_scores = np.array([c.calibrated_probability for c in state.queue[:250]])
+        ref_df = pd.DataFrame({"score": state.reference_scores})
+        cur_df = pd.DataFrame({"score": benchmark_scores})
+        report = check_drift_report(ref_df, cur_df, columns=["score"])
+        row = report.iloc[0]
+        return {
+            "status": "benchmark_preview",
+            "n_observations": len(benchmark_scores),
+            "minimum_required": 100,
+            "psi": float(row["psi"]),
+            "psi_interpretation": str(row["psi_interpretation"]),
+            "ks_statistic": float(row["ks_statistic"]),
+            "ks_p_value": float(row["ks_p_value"]),
+            "ks_drift_detected": bool(row["ks_drift_detected"]),
+            "source_type": "benchmark_holdout",
+            "message": "Preview calculated from holdout queue baseline. For production drift, 100+ live predictions are required.",
+        }
+
+    return live_result
+
+
+@v1.get("/monitoring/drift/history", tags=["Monitoring"], summary="Historical time-series drift snapshots")
+def drift_history(
+    source_type: str | None = Query(None, description="Filter by source: live_telemetry or benchmark"),
+):
+    """Return historical time-series drift snapshots from database."""
+    snapshots = get_drift_history(limit=30, source_type=source_type)
+    total_events = count_prediction_events()
     return {
-        "status": "ok",
-        "n_recent_predictions": len(recent_scores),
-        "psi": row["psi"],
-        "psi_interpretation": row["psi_interpretation"],
-        "ks_p_value": row["ks_p_value"],
-        "ks_drift_detected": bool(row["ks_drift_detected"]),
+        "total_live_prediction_events": total_events,
+        "snapshots_count": len(snapshots),
+        "snapshots": snapshots,
     }
+
+
+@v1.post("/monitoring/drift/snapshot", tags=["Monitoring"], summary="Record on-demand drift snapshot")
+def trigger_drift_snapshot(
+    _: bool = Depends(verify_admin_authorization),
+):
+    """Force an on-demand drift snapshot from live prediction events."""
+    if state.reference_scores is None:
+        raise HTTPException(status_code=503, detail="Reference scores not loaded")
+
+    result = compute_live_drift_from_events(
+        reference_scores=state.reference_scores,
+        min_samples=10,
+        model_version=state.model_version or "unknown",
+    )
+    return result
 
 
 @v1.get("/bandit/posteriors", tags=["Policy"], summary="Thompson Sampling posteriors")

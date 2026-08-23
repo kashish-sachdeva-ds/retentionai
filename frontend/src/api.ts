@@ -5,6 +5,7 @@ import type {
   CounterfactualResponse,
   Customer360Data,
   DecisionTraceData,
+  DriftHistoryResponse,
   DriftResponse,
   ExperimentsResponse,
   FullModelCard,
@@ -186,8 +187,19 @@ export function getBanditPosteriors() {
   return request<BanditPosteriorResponse>('/bandit/posteriors');
 }
 
-export function getDrift() {
-  return request<DriftResponse>('/monitoring/drift');
+export function getDrift(includeBenchmark: boolean = false) {
+  return request<DriftResponse>(`/monitoring/drift?include_benchmark=${includeBenchmark}`);
+}
+
+export function getDriftHistory(sourceType?: string) {
+  const query = sourceType ? `?source_type=${encodeURIComponent(sourceType)}` : '';
+  return request<DriftHistoryResponse>(`/monitoring/drift/history${query}`);
+}
+
+export function triggerDriftSnapshot() {
+  return request<DriftResponse>('/monitoring/drift/snapshot', {
+    method: 'POST',
+  });
 }
 
 export function submitFeedback(requestId: string, arm: string, retained: boolean) {

@@ -106,6 +106,13 @@ MODEL_CARD = {
     "validation": {
         "protocol": "Disjoint 4-way split: train / calibration / conformal / holdout",
         "holdout_contamination": "None — holdout never seen by model, calibrator, or conformal threshold",
+        "splits": {
+            "train": {"rows": 5634, "pct": 80.0, "role": "XGBoost tree fitting only"},
+            "calibration": {"rows": 470, "pct": 6.7, "role": "Isotonic mapping (Frozen)"},
+            "conformal": {"rows": 470, "pct": 6.7, "role": "Mondrian alpha thresholds"},
+            "holdout": {"rows": 469, "pct": 6.6, "role": "Untouched release metrics"},
+            "total": 7043
+        }
     },
     "primary_metric": "PR-AUC (area under Precision-Recall curve)",
     "calibration": {

@@ -1,25 +1,26 @@
-"""
-Decision trace system for RetentionAI.
+"""Decision trace system for RetentionAI with persistent database storage.
 
 Every scoring event generates a trace — a timestamped record of every
 pipeline step from input validation through to the final recommendation.
-This borrows the observability philosophy from modern AI platforms
-(Arize, LangSmith, etc.) where every inference is inspectable.
 
-Traces are stored in memory (last N traces) for the portfolio version.
-In production, these would go to a database or observability backend.
+Traces are stored durably in the database (SQLite/PostgreSQL) and can be
+inspected for transparency and pipeline performance debugging.
 """
 
 from __future__ import annotations
 
 import datetime
+import json
+import logging
 import threading
 import uuid
-from collections import OrderedDict
 from dataclasses import dataclass, field
+from typing import Any
 
+from src.db.models import DecisionTraceModel
+from src.db.session import get_db_session
 
-MAX_TRACES = 500
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -47,7 +48,7 @@ class DecisionTrace:
     conformal_set: list[int] | None = None
     priority_score: float | None = None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "trace_id": self.trace_id,
             "customer_id": self.customer_id,
@@ -73,42 +74,111 @@ class DecisionTrace:
 
 
 class TraceStore:
-    """Thread-safe in-memory trace store with bounded capacity."""
+    """Persistent database-backed trace store with SQLite/PostgreSQL engine."""
 
-    def __init__(self, max_traces: int = MAX_TRACES):
-        self._traces: OrderedDict[str, DecisionTrace] = OrderedDict()
-        self._max = max_traces
+    def __init__(self):
         self._lock = threading.Lock()
 
     def store(self, trace: DecisionTrace) -> None:
+        """Persist decision trace to database."""
         with self._lock:
-            self._traces[trace.trace_id] = trace
-            while len(self._traces) > self._max:
-                self._traces.popitem(last=False)
+            try:
+                with get_db_session() as session:
+                    model = DecisionTraceModel(
+                        trace_id=trace.trace_id,
+                        customer_id=trace.customer_id,
+                        started_at=trace.started_at,
+                        completed_at=trace.completed_at,
+                        total_duration_ms=trace.total_duration_ms,
+                        model_version=trace.model_version,
+                        final_recommendation=trace.final_recommendation,
+                        calibrated_probability=trace.calibrated_probability,
+                        conformal_set_json=json.dumps(trace.conformal_set) if trace.conformal_set else None,
+                        priority_score=trace.priority_score,
+                        steps_json=json.dumps([
+                            {
+                                "step_name": s.step_name,
+                                "timestamp": s.timestamp,
+                                "duration_ms": s.duration_ms,
+                                "status": s.status,
+                                "details": s.details,
+                            }
+                            for s in trace.steps
+                        ]),
+                    )
+                    session.merge(model)
+            except Exception as exc:
+                logger.error("Failed to persist decision trace %s to database: %s", trace.trace_id, exc)
 
     def get(self, trace_id: str) -> DecisionTrace | None:
-        with self._lock:
-            return self._traces.get(trace_id)
+        """Retrieve decision trace by ID from database."""
+        try:
+            with get_db_session() as session:
+                row = session.query(DecisionTraceModel).filter_by(trace_id=trace_id).first()
+                if not row:
+                    return None
+                steps_data = json.loads(row.steps_json) if row.steps_json else []
+                steps = [
+                    TraceStep(
+                        step_name=s.get("step_name", ""),
+                        timestamp=s.get("timestamp", ""),
+                        duration_ms=s.get("duration_ms", 0.0),
+                        status=s.get("status", "completed"),
+                        details=s.get("details", {}),
+                    )
+                    for s in steps_data
+                ]
+                return DecisionTrace(
+                    trace_id=row.trace_id,
+                    customer_id=row.customer_id,
+                    started_at=row.started_at,
+                    completed_at=row.completed_at,
+                    total_duration_ms=row.total_duration_ms,
+                    steps=steps,
+                    model_version=row.model_version,
+                    final_recommendation=row.final_recommendation,
+                    calibrated_probability=row.calibrated_probability,
+                    conformal_set=json.loads(row.conformal_set_json) if row.conformal_set_json else None,
+                    priority_score=row.priority_score,
+                )
+        except Exception as exc:
+            logger.error("Failed to query decision trace %s: %s", trace_id, exc)
+            return None
 
-    def list_recent(self, limit: int = 50) -> list[dict]:
-        with self._lock:
-            items = list(self._traces.values())[-limit:]
-            return [
-                {
-                    "trace_id": t.trace_id,
-                    "customer_id": t.customer_id,
-                    "started_at": t.started_at,
-                    "total_duration_ms": t.total_duration_ms,
-                    "final_recommendation": t.final_recommendation,
-                    "calibrated_probability": t.calibrated_probability,
-                    "priority_score": t.priority_score,
-                }
-                for t in reversed(items)
-            ]
+    def list_recent(self, limit: int = 50) -> list[dict[str, Any]]:
+        """List most recent decision traces from database."""
+        try:
+            with get_db_session() as session:
+                rows = (
+                    session.query(DecisionTraceModel)
+                    .order_by(DecisionTraceModel.started_at.desc())
+                    .limit(limit)
+                    .all()
+                )
+                return [
+                    {
+                        "trace_id": t.trace_id,
+                        "customer_id": t.customer_id,
+                        "started_at": t.started_at,
+                        "total_duration_ms": t.total_duration_ms,
+                        "final_recommendation": t.final_recommendation,
+                        "calibrated_probability": t.calibrated_probability,
+                        "priority_score": t.priority_score,
+                    }
+                    for t in rows
+                ]
+        except Exception as exc:
+            logger.error("Failed to list recent traces: %s", exc)
+            return []
 
     def count(self) -> int:
-        with self._lock:
-            return len(self._traces)
+        """Count total decision traces in database."""
+        try:
+            with get_db_session() as session:
+                return session.query(DecisionTraceModel).count()
+        except Exception as exc:
+            logger.error("Failed to count traces: %s", exc)
+            return 0
 
 
 # Singleton trace store for the application
