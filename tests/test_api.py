@@ -3,7 +3,7 @@ import redis
 import pytest
 from fastapi.testclient import TestClient
 
-from src.api.main import app
+from src.api.main import DRIFT_CHECK_MIN_SAMPLES, app
 from src.api.redis_bandit import record_prediction_assignment
 
 SAMPLE_CUSTOMER = {
@@ -225,11 +225,15 @@ def test_drift_endpoint_reports_ok_after_enough_predictions(client):
     except Exception:
         pytest.skip("Redis server not available at localhost:6379")
 
-    for _ in range(35):
+    # Live drift is calculated from durable prediction events, not the
+    # short-lived Redis list. Keep this test aligned with the API's minimum
+    # sample contract (currently 100) instead of the old Redis threshold.
+    for _ in range(DRIFT_CHECK_MIN_SAMPLES):
         client.post("/api/v1/predict", json=SAMPLE_CUSTOMER)
     response = client.get("/api/v1/monitoring/drift")
     body = response.json()
     assert body["status"] == "ok"
+    assert body["n_observations"] >= DRIFT_CHECK_MIN_SAMPLES
     assert "psi" in body and "ks_p_value" in body
 
 
