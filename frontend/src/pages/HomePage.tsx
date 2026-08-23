@@ -18,7 +18,7 @@ interface HomePageProps {
   assessmentCount: number;
 }
 
-export function HomePage({}: HomePageProps) {
+export function HomePage(_props: HomePageProps) {
   const navigate = useNavigate();
   const [summary, setSummary] = useState<QueueSummary | null>(null);
   const [topCustomers, setTopCustomers] = useState<CustomerPriorityItem[]>([]);

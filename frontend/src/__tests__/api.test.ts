@@ -2,13 +2,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   getHealth,
   predictCustomer,
-  getCounterfactual,
   getQueue,
-  getQueueSummary,
   getCustomer360,
-  runScenario,
-  listAuditRecords,
-  ApiError,
 } from '../api';
 import type { PredictionPayload } from '../types';
 
