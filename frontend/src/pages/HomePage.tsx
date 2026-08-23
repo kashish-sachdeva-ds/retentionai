@@ -57,7 +57,7 @@ export function HomePage(_props: HomePageProps) {
     {
       num: '01',
       name: 'PREDICT',
-      desc: 'XGBoost tree ensemble calculates raw non-linear churn propensity.',
+      desc: 'XGBoost churn propensity',
       badge: 'Stage 8 · Model',
       icon: Sparkles,
       color: 'text-indigo-600',
@@ -67,7 +67,7 @@ export function HomePage(_props: HomePageProps) {
     {
       num: '02',
       name: 'CALIBRATE',
-      desc: 'Isotonic regression transforms margins into true posterior probabilities (ECE < 0.056).',
+      desc: 'Isotonic probability calibration',
       badge: 'Stage 9 · Calibration',
       icon: Scale,
       color: 'text-sky-600',
@@ -77,7 +77,7 @@ export function HomePage(_props: HomePageProps) {
     {
       num: '03',
       name: 'QUANTIFY UNCERTAINTY',
-      desc: 'Mondrian conformal prediction yields valid 95% marginal coverage sets {0}, {1}, or {0, 1}.',
+      desc: 'Mondrian conformal prediction',
       badge: 'Stage 9 · Conformal',
       icon: ShieldAlert,
       color: 'text-amber-600',
@@ -87,7 +87,7 @@ export function HomePage(_props: HomePageProps) {
     {
       num: '04',
       name: 'PRIORITIZE',
-      desc: '4-factor knapsack scoring ranks subscribers by Risk × Revenue × Exit Sensitivity.',
+      desc: 'Budget-constrained economic ranking',
       badge: 'Stage 10 · Policy',
       icon: ListOrdered,
       color: 'text-violet-600',
@@ -97,7 +97,7 @@ export function HomePage(_props: HomePageProps) {
     {
       num: '05',
       name: 'ACT',
-      desc: 'Operational recommendation engine outputs high-ROI intervention or triage review.',
+      desc: 'Recommended operational next step',
       badge: 'Action Routing',
       icon: PhoneCall,
       color: 'text-emerald-600',
@@ -106,8 +106,8 @@ export function HomePage(_props: HomePageProps) {
     },
     {
       num: '06',
-      name: 'OBSERVE',
-      desc: 'Thompson Sampling multi-armed bandit records real retention outcome feedback.',
+      name: 'FEEDBACK',
+      desc: 'Thompson Sampling + outcome updates',
       badge: 'Stage 11 · Bandit',
       icon: GitBranch,
       color: 'text-teal-600',
@@ -117,7 +117,7 @@ export function HomePage(_props: HomePageProps) {
     {
       num: '07',
       name: 'AUDIT',
-      desc: 'Immutable decision traces and GRC audit records committed to durable database.',
+      desc: 'Durable decision + execution trace',
       badge: 'Durable Storage',
       icon: FileCheck2,
       color: 'text-rose-600',
@@ -127,7 +127,7 @@ export function HomePage(_props: HomePageProps) {
     {
       num: '08',
       name: 'MONITOR',
-      desc: 'Paired PSI quantile distance + Kolmogorov-Smirnov test track live output drift.',
+      desc: 'PSI + KS output drift + event lineage',
       badge: 'Stage 14 · Drift',
       icon: Activity,
       color: 'text-indigo-600',
@@ -269,6 +269,23 @@ export function HomePage(_props: HomePageProps) {
               </div>
             );
           })}
+        </div>
+
+        {/* Closed Loop Return Ribbon */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/50 px-5 py-3 text-xs text-indigo-900">
+          <div className="flex items-center gap-2 font-semibold">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-white text-[10px] font-bold">
+              ↺
+            </span>
+            <span>Continuous Closed Loop: Drift telemetry and outcome feedback continuously inform model recalibration and the next scoring cycle</span>
+          </div>
+          <button
+            onClick={() => navigate('/assessment')}
+            className="shrink-0 inline-flex items-center gap-1.5 font-bold text-indigo-700 hover:text-indigo-900 transition cursor-pointer"
+          >
+            <span>Return to 01 PREDICT</span>
+            <ArrowRight className="h-3.5 w-3.5" />
+          </button>
         </div>
       </section>
 
