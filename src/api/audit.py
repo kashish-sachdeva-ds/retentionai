@@ -194,20 +194,41 @@ class AuditStore:
         decision_id: str,
         status: str,
         reviewer: str = "human_operator",
-    ) -> bool:
-        """Update review status of a decision (approved, rejected, escalated)."""
+    ) -> AuditRecord | None:
+        """Update review status of a decision (approved, rejected, escalated) and return updated record."""
         try:
             with get_db_session() as session:
                 row = session.query(AuditRecordModel).filter_by(decision_id=decision_id).first()
                 if not row:
-                    return False
+                    return None
                 row.human_review_status = status
                 row.reviewer = reviewer
                 row.review_timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
-                return True
+                session.flush()
+                return AuditRecord(
+                    decision_id=row.decision_id,
+                    customer_id=row.customer_id,
+                    model_version=row.model_version,
+                    policy_version=row.policy_version,
+                    timestamp=row.timestamp,
+                    calibrated_probability=row.calibrated_probability,
+                    conformal_set=json.loads(row.conformal_set_json) if row.conformal_set_json else [1],
+                    raw_probability=row.raw_probability,
+                    economic_threshold=row.economic_threshold,
+                    above_threshold=row.above_threshold,
+                    recommended_action=row.recommended_action,
+                    decision_confidence=row.decision_confidence,
+                    priority_score=row.priority_score,
+                    customer_value=row.customer_value,
+                    uncertainty_state=row.uncertainty_state,
+                    trace_id=row.trace_id,
+                    human_review_status=row.human_review_status,
+                    reviewer=row.reviewer,
+                    review_timestamp=row.review_timestamp,
+                )
         except Exception as exc:
             logger.error("Failed to update review status for %s: %s", decision_id, exc)
-            return False
+            return None
 
 
 # Singleton audit store

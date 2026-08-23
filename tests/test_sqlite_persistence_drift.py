@@ -58,6 +58,14 @@ def test_sqlite_persistence_and_event_driven_drift():
             assert event_row is not None
             assert event_row.request_id == req_id
 
+        # 2b. Test updating human review status via PATCH endpoint
+        patch_res = client.patch(f"/api/v1/audit/{decision_id}/review", json={"status": "approved", "reviewer": "pytest_lead"})
+        assert patch_res.status_code == 200
+        patch_data = patch_res.json()
+        assert patch_data["decision_id"] == decision_id
+        assert patch_data["human_review_status"] == "approved"
+        assert patch_data["reviewer"] == "pytest_lead"
+
         # 3. Log 100 events and check live drift
         rng = np.random.default_rng(42)
         simulated_scores = rng.beta(2.5, 4.0, size=100)
