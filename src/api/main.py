@@ -1,11 +1,19 @@
-"""Stage 12b -- the production API. Wires together every prior stage's real,
-tested artifact into one service:
+"""RetentionAI Decision Intelligence API.
+
+Transparent decision-intelligence platform that converts calibrated churn
+predictions into uncertainty-aware, budget-constrained customer-prioritization
+decisions, with full model evaluation, lineage, monitoring and human-review
+controls.
+
+Wires together every prior stage's real, tested artifact into one service:
     Stage 6  -> the leakage-safe pipeline (fit once at startup)
     Stage 8  -> XGBoost champion model (ADR-009 -- confirmed winner on
                 real data across PR-AUC, Precision@K, and Recall@K)
     Stage 9  -> isotonic calibration + Mondrian conformal thresholds
     Stage 11 -> Redis-backed Thompson Sampling arm selection
     Stage 12a -> counterfactual search, run as a background task
+    Stage 13 -> SHAP explanations (TreeExplainer)
+    Decision -> Priority scoring, budget allocation, decision traces, audit
 
 Model artifacts are persisted to the models/ directory after training and
 loaded on subsequent startups, avoiding a full retrain from CSV every
@@ -21,9 +29,12 @@ guarantee.
 
 import hashlib
 import json
+import logging
 import os
+import time
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Literal
 from uuid import UUID
 
@@ -37,7 +48,9 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field, model_validator
 from sklearn.model_selection import train_test_split
 
+from src.api.audit import audit_store, create_audit_record
 from src.api.background import compute_and_store_counterfactual, get_stored_counterfactual
+from src.api.experiments import get_experiments, get_lineage, get_model_card as get_full_model_card
 from src.api.inference import transform_customer_for_inference
 from src.api.redis_bandit import (
     get_arm_posterior,
@@ -46,6 +59,7 @@ from src.api.redis_bandit import (
     select_arm_redis,
 )
 from src.api.metrics import MODEL_PREDICTIONS_TOTAL, BANDIT_FEEDBACK_TOTAL
+from src.api.traces import TraceBuilder, trace_store
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 from src.api.security import (
     RateLimiter,
@@ -56,12 +70,14 @@ from src.config import (
     ALLOW_SYNTHETIC_DATA,
     ALLOWED_ORIGINS,
     FORCE_RETRAIN,
+    PROJECT_ROOT,
     RAW_CSV_PATH,
     REDIS_HOST,
     REDIS_PORT,
     REDIS_URL,
 )
-from src.features.pipeline import run_stage6_split
+from src.explain.shap_explainer import build_explainer, explain_prediction
+from src.features.pipeline import prepare_features, run_stage6_split, transform_new
 from src.modeling.calibration import calibrate_model
 from src.modeling.champion import train_xgboost
 from src.modeling.conformal import (
@@ -70,8 +86,17 @@ from src.modeling.conformal import (
     nonconformity_scores,
 )
 from src.modeling.evaluation import build_evaluation_report
-from src.modeling.persistence import load_artifacts, save_artifacts
+from src.modeling.persistence import load_artifacts, save_artifacts, MODELS_DIR
 from src.monitoring.drift import check_drift_report
+from src.policies.priority import (
+    CustomerPriority,
+    score_customer,
+    ECONOMIC_THRESHOLD as POLICY_THRESHOLD,
+    DEFAULT_WEIGHTS,
+)
+from src.policies.budget import allocate_budget, compare_strategies
+
+logger = logging.getLogger(__name__)
 
 RECENT_SCORES_KEY = "monitoring:recent_scores"
 RECENT_SCORES_MAX = 1000
@@ -98,6 +123,10 @@ class ModelState:
         self.reference_scores = None
         self.model_version = None
         self.evaluation = None
+        self.shap_explainer = None
+        self.raw_df = None  # Original dataset for batch scoring
+        self.queue: list[CustomerPriority] = []  # Current priority queue
+        self.queue_generated_at: str | None = None
 
 
 state = ModelState()
@@ -210,18 +239,73 @@ async def lifespan(app: FastAPI):
             training_data=training_data,
         )
 
+    # Build SHAP explainer from the raw (uncalibrated) model
+    try:
+        state.shap_explainer = build_explainer(state.model)
+        logger.info("SHAP TreeExplainer built successfully")
+    except Exception as exc:
+        logger.warning("SHAP explainer could not be built: %s", exc)
+        state.shap_explainer = None
+
+    # Load raw dataset for batch scoring
+    try:
+        state.raw_df = pd.read_csv(RAW_CSV_PATH)
+        logger.info("Raw dataset loaded: %d rows", len(state.raw_df))
+    except Exception as exc:
+        logger.warning("Could not load raw dataset for batch scoring: %s", exc)
+        state.raw_df = None
+
+    # Auto-generate the priority queue on startup
+    if state.raw_df is not None and state.calibrated_model is not None:
+        try:
+            state.queue = _batch_score_customers(state.raw_df)
+            state.queue_generated_at = pd.Timestamp.now(tz="UTC").isoformat()
+            logger.info("Priority queue generated: %d customers scored", len(state.queue))
+        except Exception as exc:
+            logger.warning("Auto queue generation failed: %s", exc)
+
     state.rng = np.random.default_rng()
     yield
 
 
+def _batch_score_customers(df: pd.DataFrame) -> list[CustomerPriority]:
+    """Score all customers in the dataset and return priority-sorted list (vectorized & fast)."""
+    X_all, _ = prepare_features(df)
+    X_transformed = transform_new(X_all, state.artifacts)
+    probs_2col = state.calibrated_model.predict_proba(X_transformed)
+    calibrated_probs = probs_2col[:, 1]
+    all_sets = conformal_prediction_sets(
+        probs_2col, state.conformal_thresholds, classes=[0, 1]
+    )
+
+    records = df.to_dict(orient="records")
+    queue = []
+    for i, raw in enumerate(records):
+        if i >= len(calibrated_probs):
+            break
+        cid = str(raw.get("customerID", f"C-{i}"))
+        priority = score_customer(
+            customer_id=cid,
+            raw_customer=raw,
+            calibrated_prob=float(calibrated_probs[i]),
+            conformal_set=sorted(all_sets[i]),
+        )
+        queue.append(priority)
+
+    queue.sort(key=lambda c: -c.priority.priority_score)
+    return queue
+
+
 app = FastAPI(
-    title="RetentionAI Public API",
+    title="RetentionAI Decision Intelligence API",
     description=(
-        "Production-grade calibrated telecom churn prediction with conformal "
-        "uncertainty quantification, Thompson Sampling policy routing, and "
-        "counterfactual lever search. All error responses follow RFC 7807."
+        "Transparent decision-intelligence platform that converts calibrated "
+        "churn predictions into uncertainty-aware, budget-constrained "
+        "customer-prioritization decisions, with full model evaluation, "
+        "lineage, monitoring, and human-review controls. "
+        "All error responses follow RFC 7807."
     ),
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -413,6 +497,14 @@ class PredictionResponse(BaseModel):
     conformal_prediction_set: list = Field(description="95% marginal coverage Mondrian prediction set.")
     recommended_arm: str = Field(description="Selected treatment arm from the Thompson Sampling Bandit policy.")
     counterfactual_status: str = Field(description="Status of the asynchronous counterfactual lever search.")
+    priority_score: float | None = Field(default=None, description="Composite priority score in [0, 100].")
+    recommended_action: str | None = Field(default=None, description="Operational recommended next step.")
+    decision_confidence: str | None = Field(default=None, description="Decision confidence level (high/medium/low).")
+    uncertainty_label: str | None = Field(default=None, description="Actionable uncertainty state label.")
+    human_review_required: bool | None = Field(default=None, description="Whether human diagnostic review is required.")
+    shap_contributions: list[dict] | None = Field(default=None, description="Top SHAP feature contributions.")
+    trace_id: str | None = Field(default=None, description="Identifier of the generated decision trace.")
+    decision_id: str | None = Field(default=None, description="Identifier of the generated audit record.")
 
 
 def _extract_actionable_raw(raw: dict) -> dict:
@@ -446,7 +538,9 @@ def model_card():
 def predict(customer: CustomerRequest, background_tasks: BackgroundTasks, request: Request):
     """Accepts a customer feature vector, returns an isotonically calibrated
     churn probability, a 95% Mondrian conformal prediction set, the Thompson
-    Sampling recommended retention arm, and kicks off an async counterfactual search."""
+    Sampling recommended retention arm, SHAP feature drivers, priority score,
+    and kicks off an async counterfactual search."""
+    start_time = time.perf_counter()
     if state.model is None:
         raise HTTPException(status_code=503, detail="Model not yet loaded")
 
@@ -462,17 +556,67 @@ def predict(customer: CustomerRequest, background_tasks: BackgroundTasks, reques
         )
 
     raw = customer.model_dump()
-    model_input = transform_customer_for_inference(raw, state.artifacts)
+    customer_id = str(raw.get("customerID", "live-request"))
+    trace_builder = TraceBuilder(customer_id=customer_id, model_version=state.model_version)
 
+    # 1. Feature pipeline step
+    t_feat_start = time.perf_counter()
+    model_input = transform_customer_for_inference(raw, state.artifacts)
+    t_feat_dur = (time.perf_counter() - t_feat_start) * 1000.0
+    trace_builder.add_step("feature_transformation", duration_ms=t_feat_dur, details={"input_features": len(raw)})
+
+    # 2. Raw inference + calibration step
+    t_infer_start = time.perf_counter()
+    raw_prob = float(state.model.predict_proba(model_input)[0, 1])
     calibrated_prob = float(state.calibrated_model.predict_proba(model_input)[0, 1])
+    t_infer_dur = (time.perf_counter() - t_infer_start) * 1000.0
+    trace_builder.add_step(
+        "model_inference_and_calibration",
+        duration_ms=t_infer_dur,
+        details={"raw_probability": round(raw_prob, 4), "calibrated_probability": round(calibrated_prob, 4)},
+    )
+
     try:
         redis_client.lpush(RECENT_SCORES_KEY, calibrated_prob)
         redis_client.ltrim(RECENT_SCORES_KEY, 0, RECENT_SCORES_MAX - 1)
     except Exception:
         pass
 
+    # 3. Conformal prediction set step
     probs_2col = np.array([[1 - calibrated_prob, calibrated_prob]])
     pred_set = conformal_prediction_sets(probs_2col, state.conformal_thresholds, classes=[0, 1])[0]
+    sorted_pred_set = sorted(pred_set)
+    trace_builder.add_step("conformal_prediction", details={"prediction_set": sorted_pred_set})
+
+    # 4. Priority scoring step
+    priority_assessment = score_customer(
+        customer_id=customer_id,
+        raw_customer=raw,
+        calibrated_prob=calibrated_prob,
+        conformal_set=sorted_pred_set,
+    )
+    trace_builder.add_step(
+        "priority_policy_evaluation",
+        details={
+            "priority_score": priority_assessment.priority.priority_score,
+            "action": priority_assessment.recommended_action,
+            "confidence": priority_assessment.decision_confidence,
+        },
+    )
+
+    # 5. SHAP explanation
+    shap_contributions = None
+    if state.shap_explainer is not None:
+        try:
+            contributions = explain_prediction(
+                state.shap_explainer, model_input, state.artifacts["encoded_columns"]
+            )
+            shap_contributions = [
+                {"feature": row["feature"], "shap_value": round(float(row["shap_value"]), 4)}
+                for _, row in contributions.head(8).iterrows()
+            ]
+        except Exception:
+            shap_contributions = None
 
     recommended_arm = select_arm_redis(redis_client, ARM_NAMES, state.rng)
 
@@ -496,16 +640,49 @@ def predict(customer: CustomerRequest, background_tasks: BackgroundTasks, reques
         has_internet=has_internet,
     )
 
+    total_dur = (time.perf_counter() - start_time) * 1000.0
+    trace = trace_builder.complete(
+        recommendation=priority_assessment.recommended_action,
+        calibrated_probability=calibrated_prob,
+        conformal_set=sorted_pred_set,
+        priority_score=priority_assessment.priority.priority_score,
+        total_duration_ms=total_dur,
+    )
+
+    # Create immutable audit record
+    audit_rec = create_audit_record(
+        customer_id=customer_id,
+        model_version=state.model_version or "unknown",
+        calibrated_probability=calibrated_prob,
+        conformal_set=sorted_pred_set,
+        raw_probability=raw_prob,
+        recommended_action=priority_assessment.recommended_action,
+        decision_confidence=priority_assessment.decision_confidence,
+        priority_score=priority_assessment.priority.priority_score,
+        customer_value=priority_assessment.customer_value,
+        uncertainty_state=priority_assessment.uncertainty.label,
+        above_threshold=priority_assessment.above_economic_threshold,
+        trace_id=trace.trace_id,
+    )
+
     # Record Prometheus business metric
     MODEL_PREDICTIONS_TOTAL.labels(model_version=state.model_version).inc()
 
     return PredictionResponse(
         request_id=request_id,
-        model_version=state.model_version,
+        model_version=state.model_version or "unknown",
         calibrated_churn_probability=calibrated_prob,
-        conformal_prediction_set=sorted(pred_set),
+        conformal_prediction_set=sorted_pred_set,
         recommended_arm=recommended_arm,
         counterfactual_status="pending",
+        priority_score=priority_assessment.priority.priority_score,
+        recommended_action=priority_assessment.recommended_action,
+        decision_confidence=priority_assessment.decision_confidence,
+        uncertainty_label=priority_assessment.uncertainty.label,
+        human_review_required=priority_assessment.uncertainty.human_review_required,
+        shap_contributions=shap_contributions,
+        trace_id=trace.trace_id,
+        decision_id=audit_rec.decision_id,
     )
 
 
@@ -605,9 +782,379 @@ def submit_feedback(
 
 
 # ---------------------------------------------------------------------------
+# Decision Intelligence Endpoints
+# ---------------------------------------------------------------------------
+
+def _customer_priority_to_dict(c: CustomerPriority) -> dict:
+    """Serialise a CustomerPriority dataclass to a JSON-safe dict."""
+    return {
+        "customer_id": c.customer_id,
+        "calibrated_probability": round(c.calibrated_probability, 4),
+        "conformal_set": c.conformal_set,
+        "uncertainty": {
+            "label": c.uncertainty.label,
+            "confidence": c.uncertainty.confidence,
+            "human_review_required": c.uncertainty.human_review_required,
+        },
+        "customer_value": c.customer_value,
+        "exit_sensitivity": round(c.exit_sensitivity, 4),
+        "contactability": round(c.contactability, 4),
+        "priority": {
+            "score": c.priority.priority_score,
+            "risk_component": c.priority.risk_component,
+            "value_component": c.priority.value_component,
+            "exit_sensitivity_component": c.priority.exit_sensitivity_component,
+            "contactability_component": c.priority.contactability_component,
+            "uncertainty_component": c.priority.uncertainty_component,
+            "weights_used": c.priority.weights_used,
+        },
+        "recommended_action": c.recommended_action,
+        "decision_confidence": c.decision_confidence,
+        "above_economic_threshold": c.above_economic_threshold,
+    }
+
+
+@v1.get("/queue", tags=["Decision Intelligence"], summary="Priority queue")
+def get_queue(limit: int = 100, offset: int = 0):
+    """Return the priority-ranked customer queue with full decision context."""
+    if not state.queue:
+        return {
+            "status": "queue_not_available",
+            "detail": "Batch scoring has not been run. The queue is generated on API startup.",
+            "total_customers": 0,
+            "customers": [],
+        }
+
+    total = len(state.queue)
+    page = state.queue[offset: offset + limit]
+    return {
+        "status": "ok",
+        "total_customers": total,
+        "queue_generated_at": state.queue_generated_at,
+        "showing": len(page),
+        "offset": offset,
+        "risk_bands": {
+            "95_plus": sum(1 for c in state.queue if c.calibrated_probability >= 0.95),
+            "80_to_95": sum(1 for c in state.queue if 0.80 <= c.calibrated_probability < 0.95),
+            "50_to_80": sum(1 for c in state.queue if 0.50 <= c.calibrated_probability < 0.80),
+            "below_50": sum(1 for c in state.queue if c.calibrated_probability < 0.50),
+        },
+        "customers": [_customer_priority_to_dict(c) for c in page],
+    }
+
+
+@v1.get("/queue/summary", tags=["Decision Intelligence"], summary="Queue summary for command center")
+def queue_summary():
+    """Aggregated queue statistics for the command center dashboard."""
+    if not state.queue:
+        return {"status": "queue_not_available", "total": 0}
+
+    probs = [c.calibrated_probability for c in state.queue]
+    return {
+        "status": "ok",
+        "total_customers": len(state.queue),
+        "queue_generated_at": state.queue_generated_at,
+        "risk_bands": {
+            "95_plus": sum(1 for p in probs if p >= 0.95),
+            "80_to_95": sum(1 for p in probs if 0.80 <= p < 0.95),
+            "50_to_80": sum(1 for p in probs if 0.50 <= p < 0.80),
+            "below_50": sum(1 for p in probs if p < 0.50),
+        },
+        "above_threshold": sum(1 for p in probs if p > CHURN_THRESHOLD),
+        "human_review_required": sum(1 for c in state.queue if c.uncertainty.human_review_required),
+        "avg_risk": round(sum(probs) / len(probs), 4) if probs else 0,
+        "total_value_at_risk": round(
+            sum(c.customer_value * c.calibrated_probability for c in state.queue), 2
+        ),
+    }
+
+
+@v1.get("/customer/{customer_id}", tags=["Decision Intelligence"], summary="Customer 360")
+def get_customer(customer_id: str):
+    """Full Customer 360 payload: profile + prediction + SHAP + conformal + decision."""
+    # Find in queue
+    match = next((c for c in state.queue if c.customer_id == customer_id), None)
+    if match is None:
+        raise HTTPException(status_code=404, detail=f"Customer {customer_id} not found in queue")
+
+    result = _customer_priority_to_dict(match)
+
+    # Find raw customer data
+    if state.raw_df is not None:
+        raw_row = state.raw_df[state.raw_df["customerID"] == customer_id]
+        if not raw_row.empty:
+            result["profile"] = raw_row.iloc[0].to_dict()
+            # Convert numpy types to Python types for JSON serialization
+            for k, v in result["profile"].items():
+                if hasattr(v, "item"):
+                    result["profile"][k] = v.item()
+
+    # SHAP explanation
+    if state.shap_explainer is not None and state.raw_df is not None:
+        try:
+            raw_row = state.raw_df[state.raw_df["customerID"] == customer_id]
+            if not raw_row.empty:
+                raw_dict = raw_row.iloc[0].to_dict()
+                model_input = transform_customer_for_inference(raw_dict, state.artifacts)
+                contributions = explain_prediction(
+                    state.shap_explainer, model_input, state.artifacts["encoded_columns"]
+                )
+                result["shap_contributions"] = [
+                    {"feature": row["feature"], "shap_value": round(float(row["shap_value"]), 4)}
+                    for _, row in contributions.head(10).iterrows()
+                ]
+        except Exception as exc:
+            result["shap_contributions"] = None
+            result["shap_error"] = str(exc)
+
+    # Audit records for this customer
+    result["audit_records"] = audit_store.find_by_customer(customer_id)
+
+    # Peer comparison (population percentile)
+    if state.queue:
+        rank = next(
+            (i + 1 for i, c in enumerate(state.queue) if c.customer_id == customer_id),
+            None,
+        )
+        if rank is not None:
+            result["population_percentile"] = round(
+                (1 - rank / len(state.queue)) * 100, 1
+            )
+            result["queue_rank"] = rank
+
+    return result
+
+
+class ScenarioRequest(BaseModel):
+    budget: int = Field(ge=1, le=10000, default=100, description="Number of retention calls available")
+    objective: Literal["risk_first", "value_aware", "balanced"] = Field(
+        default="balanced", description="Allocation objective"
+    )
+    risk_weight: float = Field(ge=0, le=1, default=0.51)
+    value_weight: float = Field(ge=0, le=1, default=0.21)
+    exit_sensitivity_weight: float = Field(ge=0, le=1, default=0.14)
+    contactability_weight: float = Field(ge=0, le=1, default=0.08)
+    uncertainty_weight: float = Field(ge=0, le=1, default=0.06)
+
+
+@v1.post("/scenario", tags=["Decision Intelligence"], summary="Run budget scenario")
+def run_scenario(scenario: ScenarioRequest):
+    """Run a budget allocation scenario with custom policy weights."""
+    if not state.queue:
+        raise HTTPException(status_code=503, detail="Queue not available")
+
+    # If custom weights provided, re-score with new weights
+    custom_weights = {
+        "risk": scenario.risk_weight,
+        "customer_value": scenario.value_weight,
+        "exit_sensitivity": scenario.exit_sensitivity_weight,
+        "contactability": scenario.contactability_weight,
+        "uncertainty_adj": scenario.uncertainty_weight,
+    }
+
+    # Use current queue (already scored) for allocation
+    allocation = allocate_budget(state.queue, scenario.budget, scenario.objective)
+
+    return {
+        "budget": allocation.budget,
+        "objective": allocation.objective,
+        "total_customers": allocation.total_customers,
+        "avg_risk": allocation.avg_risk,
+        "total_value": allocation.total_value,
+        "high_risk_covered": allocation.high_risk_covered,
+        "uncertain_cases": allocation.uncertain_cases,
+        "estimated_revenue_at_risk": allocation.estimated_revenue_at_risk,
+        "risk_bands": allocation.risk_bands,
+        "top_selected": [
+            _customer_priority_to_dict(c) for c in allocation.selected[:20]
+        ],
+    }
+
+
+@v1.post("/scenario/compare", tags=["Decision Intelligence"], summary="Compare budget strategies")
+def compare_budget_strategies(budget: int = 100):
+    """Compare all three allocation strategies side-by-side."""
+    if not state.queue:
+        raise HTTPException(status_code=503, detail="Queue not available")
+
+    results = compare_strategies(state.queue, budget)
+    comparison = {}
+    for obj, alloc in results.items():
+        comparison[obj] = {
+            "budget": alloc.budget,
+            "avg_risk": alloc.avg_risk,
+            "total_value": alloc.total_value,
+            "high_risk_covered": alloc.high_risk_covered,
+            "uncertain_cases": alloc.uncertain_cases,
+            "estimated_revenue_at_risk": alloc.estimated_revenue_at_risk,
+        }
+    return {"budget": budget, "total_customers": len(state.queue), "strategies": comparison}
+
+
+# ---------------------------------------------------------------------------
+# Decision Traces & Audit
+# ---------------------------------------------------------------------------
+
+@v1.get("/traces", tags=["Observability"], summary="Recent decision traces")
+def list_traces(limit: int = 50):
+    """List recent decision traces."""
+    return {"traces": trace_store.list_recent(limit), "total": trace_store.count()}
+
+
+@v1.get("/traces/{trace_id}", tags=["Observability"], summary="Decision trace detail")
+def get_trace(trace_id: str):
+    """Get a specific decision trace with full pipeline step details."""
+    trace = trace_store.get(trace_id)
+    if trace is None:
+        raise HTTPException(status_code=404, detail=f"Trace {trace_id} not found")
+    return trace.to_dict()
+
+
+@v1.get("/audit", tags=["Governance"], summary="Recent audit records")
+def list_audit_records(limit: int = 50):
+    """List recent audit records."""
+    return {"records": audit_store.list_recent(limit), "total": audit_store.count()}
+
+
+@v1.get("/audit/{decision_id}", tags=["Governance"], summary="Audit record detail")
+def get_audit_record(decision_id: str):
+    """Get a specific audit record with full decision context."""
+    record = audit_store.get(decision_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"Audit record {decision_id} not found")
+    return record.to_dict()
+
+
+# ---------------------------------------------------------------------------
+# Model Registry & Experiments
+# ---------------------------------------------------------------------------
+
+@v1.get("/registry", tags=["ML Platform"], summary="Model registry")
+def model_registry():
+    """List all model versions from the model artifact directory."""
+    versions = []
+    if MODELS_DIR.exists():
+        for version_dir in sorted(MODELS_DIR.iterdir(), reverse=True):
+            if version_dir.is_dir():
+                manifest_path = version_dir / "manifest.json"
+                if manifest_path.exists():
+                    manifest = json.loads(manifest_path.read_text())
+                    eval_path = version_dir / "evaluation.json"
+                    evaluation_summary = None
+                    if eval_path.exists():
+                        evaluation = json.loads(eval_path.read_text())
+                        if "ranking" in evaluation:
+                            evaluation_summary = {
+                                "pr_auc": evaluation["ranking"].get("pr_auc"),
+                                "precision_at_k": evaluation["ranking"].get("precision_at_k"),
+                            }
+                    versions.append({
+                        "version": manifest.get("version"),
+                        "created_at": manifest.get("created_at"),
+                        "is_current": manifest.get("version") == state.model_version,
+                        "training_data": manifest.get("training_data", {}),
+                        "evaluation_summary": evaluation_summary,
+                    })
+    return {
+        "current_version": state.model_version,
+        "versions": versions,
+    }
+
+
+@v1.get("/registry/{version}", tags=["ML Platform"], summary="Model version detail")
+def model_version_detail(version: str):
+    """Get full manifest and evaluation for a specific model version."""
+    version_dir = MODELS_DIR / version
+    if not version_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Model version {version} not found")
+
+    manifest_path = version_dir / "manifest.json"
+    eval_path = version_dir / "evaluation.json"
+
+    if not manifest_path.exists():
+        raise HTTPException(status_code=404, detail="Manifest not found")
+
+    manifest = json.loads(manifest_path.read_text())
+    evaluation = json.loads(eval_path.read_text()) if eval_path.exists() else None
+
+    return {
+        "version": version,
+        "is_current": version == state.model_version,
+        "manifest": manifest,
+        "evaluation": evaluation,
+    }
+
+
+@v1.get("/experiments", tags=["ML Platform"], summary="Experiment comparison")
+def experiments():
+    """Return structured experiment comparison data."""
+    return {
+        "experiments": get_experiments(),
+        "lineage": get_lineage(),
+    }
+
+
+@v1.get("/model-card/full", tags=["Governance"], summary="Full model card")
+def full_model_card():
+    """Return the complete model card with purpose, limitations, and ethical considerations."""
+    card = get_full_model_card()
+    card["current_version"] = state.model_version
+    if state.evaluation:
+        card["live_evaluation"] = state.evaluation
+    return card
+
+
+# ---------------------------------------------------------------------------
+# System Health (aggregated for Command Center)
+# ---------------------------------------------------------------------------
+
+@v1.get("/system/health", tags=["Operations"], summary="Aggregated system health")
+def system_health():
+    """Aggregated health status for the Command Center dashboard."""
+    model_healthy = state.model is not None
+    calibration_healthy = state.evaluation is not None and (
+        state.evaluation.get("calibration", {}).get("ece_10_bins", 1.0) < 0.10
+    )
+
+    # Check drift status
+    drift_status = "unknown"
+    try:
+        recent_raw = redis_client.lrange(RECENT_SCORES_KEY, 0, -1)
+        recent_scores = np.array([float(s) for s in recent_raw])
+        if len(recent_scores) >= DRIFT_CHECK_MIN_SAMPLES:
+            reference_df = pd.DataFrame({"score": state.reference_scores})
+            current_df = pd.DataFrame({"score": recent_scores})
+            report = check_drift_report(reference_df, current_df, columns=["score"])
+            psi = report.iloc[0]["psi"]
+            drift_status = "low" if psi < 0.1 else ("moderate" if psi < 0.25 else "high")
+        else:
+            drift_status = "insufficient_data"
+    except Exception:
+        drift_status = "unavailable"
+
+    return {
+        "model": {"status": "healthy" if model_healthy else "unavailable", "version": state.model_version},
+        "calibration": {"status": "healthy" if calibration_healthy else "check_required"},
+        "drift": {"status": drift_status},
+        "data": {
+            "status": "fresh" if state.raw_df is not None else "unavailable",
+            "rows": len(state.raw_df) if state.raw_df is not None else 0,
+        },
+        "queue": {
+            "status": "ready" if state.queue else "not_generated",
+            "size": len(state.queue),
+            "generated_at": state.queue_generated_at,
+        },
+        "traces": {"count": trace_store.count()},
+        "audit": {"count": audit_store.count()},
+    }
+
+
+# ---------------------------------------------------------------------------
 # Mount the versioned router and add infrastructure endpoints on the root app
 # ---------------------------------------------------------------------------
 app.include_router(v1)
+
 
 
 @app.get("/", include_in_schema=False)

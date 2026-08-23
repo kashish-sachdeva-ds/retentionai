@@ -5,9 +5,13 @@ import { getHealth } from './api';
 import { Sidebar } from './components/Sidebar';
 import { TopHeader } from './components/TopHeader';
 import { HomePage } from './pages/HomePage';
+import { PriorityQueuePage } from './pages/PriorityQueuePage';
+import { Customer360Page } from './pages/Customer360Page';
 import { RiskAssessmentPage } from './pages/RiskAssessmentPage';
+import { ScenarioLabPage } from './pages/ScenarioLabPage';
 import { ModelEvidencePage } from './pages/ModelEvidencePage';
-import { AboutPage } from './pages/AboutPage';
+import { MonitoringPage } from './pages/MonitoringPage';
+import { GovernancePage } from './pages/GovernancePage';
 import type { ApiHealth, PredictionPayload, PredictionResponse, ScoredAssessment } from './types';
 
 export default function App() {
@@ -47,7 +51,7 @@ export default function App() {
 
   const handlePrediction = (response: PredictionResponse, payload: PredictionPayload) => {
     setAssessments((current) => [{ response, payload, createdAt: new Date() }, ...current]);
-    setToastMessage(`Live prediction created with the ${response.recommended_arm} policy arm.`);
+    setToastMessage(`Decision generated: ${response.recommended_action || 'Prioritize for Diagnostic Review'}`);
     void refreshHealth();
   };
 
@@ -57,7 +61,7 @@ export default function App() {
         {/* Mobile overlay */}
         {sidebarOpen && (
           <div
-            className="fixed inset-0 z-30 bg-slate-900/40 backdrop-blur-sm lg:hidden"
+            className="fixed inset-0 z-30 bg-slate-900/40 backdrop-blur-xs lg:hidden"
             onClick={() => setSidebarOpen(false)}
           />
         )}
@@ -93,20 +97,23 @@ export default function App() {
           )}
 
           <Routes>
-            <Route
-              path="/"
-              element={<HomePage health={health} assessmentCount={assessments.length} />}
-            />
-            <Route
-              path="/assess"
-              element={
-                <RiskAssessmentPage
-                  onPrediction={handlePrediction}
-                />
-              }
-            />
-            <Route path="/evidence" element={<ModelEvidencePage />} />
-            <Route path="/about" element={<AboutPage />} />
+            {/* 1. Decision Layer */}
+            <Route path="/" element={<HomePage health={health} assessmentCount={assessments.length} />} />
+            <Route path="/queue" element={<PriorityQueuePage />} />
+            <Route path="/customer/:id" element={<Customer360Page />} />
+            <Route path="/assess" element={<RiskAssessmentPage onPrediction={handlePrediction} />} />
+            <Route path="/scenarios" element={<ScenarioLabPage />} />
+
+            {/* 2. ML Platform & Trust */}
+            <Route path="/evaluation" element={<ModelEvidencePage />} />
+            <Route path="/evidence" element={<Navigate to="/evaluation" replace />} />
+            <Route path="/monitoring" element={<MonitoringPage />} />
+
+            {/* 3. Governance & Lineage */}
+            <Route path="/governance" element={<GovernancePage />} />
+            <Route path="/about" element={<Navigate to="/governance" replace />} />
+
+            {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
