@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Menu, RefreshCw, BookOpen, ShieldCheck, Code2, Info, HelpCircle } from 'lucide-react';
+import { Menu, RefreshCw, ShieldCheck, Code2, Info, HelpCircle } from 'lucide-react';
 import type { ApiHealth } from '../types';
 
 interface TopHeaderProps {
@@ -126,34 +126,23 @@ export function TopHeader({
           </span>
         )}
 
-        {/* Documentation / ADR Link */}
-        <a
-          href="https://github.com/kashish-sachdeva-ds/retentionai/tree/main/docs/decisions"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="hidden sm:inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 transition"
-          title="View 18 Architecture Decision Records (ADRs)"
-        >
-          <BookOpen className="h-3.5 w-3.5 text-slate-500" />
-          <span>18 ADRs</span>
-        </a>
-
         {/* Real GitHub Repository Link */}
         <a
           href="https://github.com/kashish-sachdeva-ds/retentionai"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 transition"
+          title="View Source Code on GitHub"
         >
           <Code2 className="h-3.5 w-3.5 text-slate-900" />
-          <span className="hidden md:inline">GitHub</span>
+          <span className="hidden sm:inline">GitHub</span>
         </a>
 
         {/* Real Status Refresh */}
         <button
           onClick={onRefreshHealth}
           disabled={healthLoading}
-          className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 shadow-2xs hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50 transition"
+          className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 shadow-2xs hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50 transition cursor-pointer"
           aria-label="Refresh API serving status"
           title="Refresh model health"
         >
@@ -163,3 +152,4 @@ export function TopHeader({
     </header>
   );
 }
+

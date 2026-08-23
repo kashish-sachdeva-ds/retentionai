@@ -181,59 +181,100 @@ export const RiskAssessmentPage: React.FC<RiskAssessmentPageProps> = ({ onPredic
   const uncertainty = result ? uncertaintyCopy(result.conformal_prediction_set) : null;
   const scenario = describeScenario(counterfactual?.raw_changes);
 
+  const [showRecruiterGuide, setShowRecruiterGuide] = useState(false);
+
   return (
-    <main className="mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-8 animate-fade-in">
-      {/* Header */}
-      <header className="max-w-3xl space-y-2">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-black uppercase tracking-widest text-indigo-700">
-            ML Decision Support
-          </span>
-          <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-[10px] font-bold text-indigo-700 border border-indigo-100">
-            Stage 12b Pipeline
-          </span>
+    <main className="mx-auto w-full max-w-7xl space-y-4 p-4 sm:p-6 animate-fade-in">
+      {/* Sleek Compact Header */}
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-200/80 pb-3.5">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-black uppercase tracking-widest text-indigo-700">
+              ML Decision Support
+            </span>
+            <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700 border border-indigo-100">
+              Stage 12b Pipeline
+            </span>
+            <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-100">
+              Triage Boundary: {(ECONOMIC_THRESHOLD * 100).toFixed(1)}%
+            </span>
+          </div>
+          <h1 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl mt-0.5">
+            Churn Prioritization Decision Engine
+          </h1>
+          <p className="text-xs text-slate-500 max-w-2xl mt-0.5">
+            Isotonically calibrated XGBoost probabilities, 95% Mondrian conformal sets, and Thompson Sampling bandit policy routing.
+          </p>
         </div>
-        <h1 className="text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">
-          Churn Prioritization Decision Engine
-        </h1>
-        <p className="text-sm leading-relaxed text-slate-600">
-          Rank customer retention calls under budget constraints using isotonically calibrated probabilities, 95% Mondrian conformal sets, and Thompson Sampling arm assignments.
-        </p>
+
+        {/* Recruiter / Evaluator Guide Toggle */}
+        <div className="shrink-0 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowRecruiterGuide((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50/70 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100/70 transition shadow-2xs cursor-pointer"
+          >
+            <span>💡 How to Evaluate</span>
+            <span className="text-[10px]">{showRecruiterGuide ? '▲' : '▼'}</span>
+          </button>
+        </div>
       </header>
 
-      {/* Economic Triage Context Callout */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-indigo-100 bg-linear-to-r from-indigo-50/80 via-white to-indigo-50/50 p-4 text-xs text-indigo-950 shadow-2xs">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-600 text-white font-black text-xs shadow-xs">
-            $
+      {/* Expandable Recruiter & IT Evaluator Guide */}
+      {showRecruiterGuide && (
+        <div className="rounded-2xl border border-indigo-100 bg-linear-to-r from-indigo-50/90 via-white to-indigo-50/60 p-4 text-xs text-slate-700 shadow-sm animate-fade-in space-y-2">
+          <div className="flex items-center justify-between border-b border-indigo-100 pb-2">
+            <span className="font-bold text-indigo-950 flex items-center gap-1.5">
+              🎯 Evaluator Guide (For Recruiters &amp; ML Engineers)
+            </span>
+            <span className="text-[10px] font-bold text-indigo-600 bg-white px-2 py-0.5 rounded border border-indigo-100">
+              Production Architecture Demo
+            </span>
           </div>
-          <div>
-            <span className="font-bold text-slate-900">Economic Decision Threshold: {(ECONOMIC_THRESHOLD * 100).toFixed(1)}%</span>
-            <p className="text-[11px] text-slate-500 mt-0.5">
-              Based on $70 diagnostic call cost vs $840 lost annual customer spend (ADR-002 Cost Matrix).
-            </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+            <div className="rounded-xl bg-white p-3 border border-slate-200 shadow-2xs space-y-1">
+              <span className="font-bold text-slate-900 flex items-center gap-1">
+                1. Test 1-Click Archetypes
+              </span>
+              <p className="text-[11px] text-slate-500 leading-snug">
+                Click <strong>1-Click Score Archetype</strong> to test High Risk (95%), Moderate Risk (23%), and Loyal (1%) customer accounts.
+              </p>
+            </div>
+            <div className="rounded-xl bg-white p-3 border border-slate-200 shadow-2xs space-y-1">
+              <span className="font-bold text-slate-900 flex items-center gap-1">
+                2. Economic Cost Matrix
+              </span>
+              <p className="text-[11px] text-slate-500 leading-snug">
+                Accounts with calibrated risk &gt; <strong>8.3%</strong> ($70 diagnostic call cost vs $840 lost LTV) enter the priority outreach queue.
+              </p>
+            </div>
+            <div className="rounded-xl bg-white p-3 border border-slate-200 shadow-2xs space-y-1">
+              <span className="font-bold text-slate-900 flex items-center gap-1">
+                3. Mondrian Conformal Sets
+              </span>
+              <p className="text-[11px] text-slate-500 leading-snug">
+                Singleton <code className="text-indigo-600 font-bold">[1]</code> = high-confidence churn; <code className="text-indigo-600 font-bold">[0, 1]</code> = ambiguous uncertainty requiring human judgment.
+              </p>
+            </div>
           </div>
         </div>
-        <span className="shrink-0 rounded-lg bg-white px-3 py-1 text-[11px] font-bold text-indigo-700 border border-indigo-100 shadow-2xs">
-          Calibrated Triage Rule
-        </span>
-      </div>
+      )}
 
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
       {/* Main 2-Column Responsive Layout */}
-      <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
         {/* LEFT COLUMN: Input Mode (Archetypes vs Custom Simulator) - 7 Cols */}
-        <section className="lg:col-span-7 space-y-6">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-xs space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+        <section className="lg:col-span-7 space-y-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2.5">
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white shadow-2xs">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white shadow-2xs">
                   1
                 </span>
                 <div>
-                  <h2 className="text-base font-bold text-slate-950">Customer Profile Input</h2>
-                  <p className="text-xs text-slate-500">
+                  <h2 className="text-sm font-bold text-slate-950">Customer Profile Input</h2>
+                  <p className="text-[11px] text-slate-500">
                     Select a benchmark archetype or configure custom customer data
                   </p>
                 </div>
@@ -244,7 +285,7 @@ export const RiskAssessmentPage: React.FC<RiskAssessmentPageProps> = ({ onPredic
                 <button
                   type="button"
                   onClick={() => setActiveTab('benchmarks')}
-                  className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 transition cursor-pointer ${
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition cursor-pointer ${
                     activeTab === 'benchmarks'
                       ? 'bg-white text-indigo-700 shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
@@ -256,7 +297,7 @@ export const RiskAssessmentPage: React.FC<RiskAssessmentPageProps> = ({ onPredic
                 <button
                   type="button"
                   onClick={() => setActiveTab('custom')}
-                  className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 transition cursor-pointer ${
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition cursor-pointer ${
                     activeTab === 'custom'
                       ? 'bg-white text-indigo-700 shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
@@ -273,8 +314,8 @@ export const RiskAssessmentPage: React.FC<RiskAssessmentPageProps> = ({ onPredic
 
             {/* TAB 1: Benchmark Archetypes (1-Click Recruiter Demo) */}
             {activeTab === 'benchmarks' && (
-              <div className="space-y-4">
-                <div className="space-y-3.5">
+              <div className="space-y-3">
+                <div className="space-y-2.5">
                   {Object.entries(PRESETS).map(([key, preset]) => {
                     const isSelected = selectedPresetKey === key;
                     const badgeColorMap = {
@@ -287,28 +328,28 @@ export const RiskAssessmentPage: React.FC<RiskAssessmentPageProps> = ({ onPredic
                       <div
                         key={key}
                         onClick={() => togglePresetSelection(key)}
-                        className={`group relative rounded-2xl border p-4.5 transition-all cursor-pointer ${
+                        className={`group relative rounded-2xl border p-3.5 transition-all cursor-pointer ${
                           isSelected
                             ? 'border-indigo-600 bg-linear-to-br from-indigo-50/90 via-white to-indigo-50/30 shadow-sm ring-2 ring-indigo-500/20'
                             : 'border-slate-200 bg-white hover:border-indigo-300 hover:bg-slate-50/60'
                         }`}
                       >
-                        <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
                           <div className="flex items-center gap-2">
                             <span
-                              className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                              className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                                 badgeColorMap[preset.riskColor]
                               }`}
                             >
                               {preset.riskTag}
                             </span>
-                            <span className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
+                            <span className="text-xs font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
                               {preset.label}
                             </span>
                           </div>
 
                           <span
-                            className={`flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold transition-all ${
+                            className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold transition-all ${
                               isSelected
                                 ? 'bg-indigo-600 text-white'
                                 : 'border border-slate-300 text-transparent bg-white group-hover:border-slate-400'
@@ -318,21 +359,21 @@ export const RiskAssessmentPage: React.FC<RiskAssessmentPageProps> = ({ onPredic
                           </span>
                         </div>
 
-                        <p className="text-xs leading-relaxed text-slate-600">
+                        <p className="text-[11px] leading-relaxed text-slate-600">
                           {preset.description}
                         </p>
 
-                        <div className="mt-2.5 text-[11px] text-slate-400 italic">
+                        <div className="mt-1.5 text-[10px] text-slate-400 italic">
                           💡 {preset.highlight}
                         </div>
 
                         {/* Direct Action Buttons Inside Card */}
-                        <div className="mt-3.5 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+                        <div className="mt-2.5 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2.5">
                           <button
                             type="button"
                             onClick={(e) => handle1ClickAssessArchetype(e, key)}
                             disabled={loading}
-                            className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-indigo-700 transition disabled:opacity-50"
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-indigo-700 transition disabled:opacity-50 cursor-pointer"
                           >
                             <Sparkles className="h-3 w-3" />
                             <span>1-Click Score Archetype</span>
@@ -340,7 +381,7 @@ export const RiskAssessmentPage: React.FC<RiskAssessmentPageProps> = ({ onPredic
                           <button
                             type="button"
                             onClick={(e) => handleCustomizeArchetype(e, key)}
-                            className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+                            className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
                           >
                             <span>Customize in Simulator</span>
                             <ChevronRight className="h-3 w-3 text-slate-400" />
@@ -352,12 +393,13 @@ export const RiskAssessmentPage: React.FC<RiskAssessmentPageProps> = ({ onPredic
                 </div>
 
                 {!selectedPresetKey && (
-                  <p className="text-center text-xs text-slate-400 py-2">
+                  <p className="text-center text-xs text-slate-400 py-1">
                     Click any archetype card above to select it, or switch to Custom Simulator.
                   </p>
                 )}
               </div>
             )}
+
 
             {/* TAB 2: Custom Customer Simulator */}
             {activeTab === 'custom' && (
@@ -427,16 +469,16 @@ export const RiskAssessmentPage: React.FC<RiskAssessmentPageProps> = ({ onPredic
         </section>
 
         {/* RIGHT COLUMN: Recommendation Review Panel (5 Cols, Sticky) */}
-        <section className="lg:col-span-5 lg:sticky lg:top-24 space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white shadow-2xs">
+        <section className="lg:col-span-5 lg:sticky lg:top-20 space-y-3">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-3.5">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white shadow-2xs">
                   2
                 </span>
                 <div>
-                  <h2 className="text-base font-bold text-slate-950">Review Recommendation</h2>
-                  <p className="text-xs text-slate-500">Calibrated risk, conformal bounds, and retention arm</p>
+                  <h2 className="text-sm font-bold text-slate-950">Review Recommendation</h2>
+                  <p className="text-[11px] text-slate-500">Calibrated risk, conformal bounds, and retention arm</p>
                 </div>
               </div>
 
@@ -450,12 +492,12 @@ export const RiskAssessmentPage: React.FC<RiskAssessmentPageProps> = ({ onPredic
 
             {/* Empty State */}
             {!result && !loading && (
-              <div className="flex min-h-[400px] flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/60 p-8 text-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-700 shadow-2xs">
-                  <ArrowRight className="h-5 w-5" />
+              <div className="flex min-h-[300px] flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/60 p-6 text-center">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700 shadow-2xs">
+                  <ArrowRight className="h-4 w-4" />
                 </div>
-                <h3 className="mt-4 text-base font-bold text-slate-900">Ready for Assessment</h3>
-                <p className="mt-2 max-w-xs text-xs leading-relaxed text-slate-500">
+                <h3 className="mt-3 text-sm font-bold text-slate-900">Ready for Assessment</h3>
+                <p className="mt-1.5 max-w-xs text-xs leading-relaxed text-slate-500">
                   Choose a customer archetype or simulate custom parameters, then click <strong>Run AI Churn Assessment</strong>.
                 </p>
               </div>
@@ -463,8 +505,8 @@ export const RiskAssessmentPage: React.FC<RiskAssessmentPageProps> = ({ onPredic
 
             {/* Progressive Loading State */}
             {loading && (
-              <div className="flex min-h-[400px] flex-col items-center justify-center rounded-xl border border-slate-100 bg-slate-50/60 p-6 text-center space-y-3">
-                <LoaderCircle className="h-9 w-9 animate-spin text-indigo-600" />
+              <div className="flex min-h-[300px] flex-col items-center justify-center rounded-xl border border-slate-100 bg-slate-50/60 p-6 text-center space-y-2.5">
+                <LoaderCircle className="h-8 w-8 animate-spin text-indigo-600" />
                 <div className="space-y-1">
                   <p className="text-sm font-bold text-slate-900">
                     {scoringStep === 1
@@ -485,16 +527,16 @@ export const RiskAssessmentPage: React.FC<RiskAssessmentPageProps> = ({ onPredic
 
             {/* Results Display */}
             {result && uncertainty && (
-              <div className="space-y-4 animate-fade-in">
+              <div className="space-y-3 animate-fade-in">
                 {/* Decision Banner */}
                 <article
-                  className={`rounded-2xl border p-5 transition-all ${
+                  className={`rounded-2xl border p-4 transition-all ${
                     isPriority
                       ? 'border-rose-200 bg-rose-50/80 text-rose-950 shadow-xs'
                       : 'border-emerald-200 bg-emerald-50/80 text-emerald-950 shadow-xs'
                   }`}
                 >
-                  <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-600">
+                  <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-600">
                     <span>Operational Decision</span>
                     <span
                       className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${
@@ -505,9 +547,9 @@ export const RiskAssessmentPage: React.FC<RiskAssessmentPageProps> = ({ onPredic
                     </span>
                   </div>
 
-                  <div className="mt-3 flex items-baseline justify-between gap-4">
+                  <div className="mt-2.5 flex items-baseline justify-between gap-4">
                     <div>
-                      <h3 className="text-2xl font-black tracking-tight">
+                      <h3 className="text-xl font-black tracking-tight">
                         {isPriority ? 'Schedule Diagnostic Call' : 'Monitor Without Call'}
                       </h3>
                       <p className="mt-1 text-xs text-slate-600">
@@ -517,7 +559,7 @@ export const RiskAssessmentPage: React.FC<RiskAssessmentPageProps> = ({ onPredic
                       </p>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="text-4xl font-black tracking-tight">
+                      <p className="text-3xl font-black tracking-tight">
                         {(probability * 100).toFixed(1)}%
                       </p>
                       <p className="text-[10px] font-semibold text-slate-500 mt-0.5">
@@ -526,6 +568,7 @@ export const RiskAssessmentPage: React.FC<RiskAssessmentPageProps> = ({ onPredic
                     </div>
                   </div>
                 </article>
+
 
                 {/* Conformal Uncertainty Signal */}
                 <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-1">

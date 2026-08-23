@@ -5,7 +5,6 @@ import {
   BarChart3,
   Info,
   X,
-  BookOpen,
   Code2,
 } from 'lucide-react';
 import type { ApiHealth } from '../types';
@@ -96,27 +95,19 @@ export function Sidebar({ isOpen, onClose, health }: SidebarProps) {
       </div>
 
       <div className="space-y-3">
-        {/* External Engineering Links */}
-        <div className="space-y-1 border-t border-slate-100 pt-3">
-          <a
-            href="https://github.com/kashish-sachdeva-ds/retentionai/blob/main/docs/ARCHITECTURE.md"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition"
-          >
-            <BookOpen className="h-3.5 w-3.5 text-slate-400" />
-            <span>Architecture Docs</span>
-          </a>
+        {/* GitHub Repository Link */}
+        <div className="border-t border-slate-100 pt-3">
           <a
             href="https://github.com/kashish-sachdeva-ds/retentionai"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition"
+            className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition"
           >
-            <Code2 className="h-3.5 w-3.5 text-slate-400" />
+            <Code2 className="h-3.5 w-3.5 text-slate-700" />
             <span>GitHub Repository</span>
           </a>
         </div>
+
 
         {/* Serving status */}
         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-2">
