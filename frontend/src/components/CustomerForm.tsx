@@ -6,12 +6,11 @@ import {
   Smartphone,
   Tv,
   Film,
-  Check,
-  AlertTriangle,
   Sparkles,
   CreditCard,
   Layers,
   Users,
+  AlertTriangle,
 } from 'lucide-react';
 import type { PredictionPayload } from '../types';
 
@@ -116,21 +115,21 @@ const ADDON_CONFIG = [
   {
     key: 'TechSupport' as const,
     label: 'Tech Support',
-    desc: '24/7 dedicated support',
-    impact: 'High Retention Impact',
+    desc: '24/7 dedicated engineering support',
+    impact: 'High Retention Lever',
     icon: Headphones,
   },
   {
     key: 'OnlineSecurity' as const,
     label: 'Online Security',
-    desc: 'Threat & malware protection',
-    impact: 'High Retention Impact',
+    desc: 'Threat & malware protection suite',
+    impact: 'High Retention Lever',
     icon: Shield,
   },
   {
     key: 'OnlineBackup' as const,
     label: 'Cloud Backup',
-    desc: 'Automated encrypted backup',
+    desc: 'Automated encrypted remote backup',
     impact: 'Ecosystem Lock-in',
     icon: Cloud,
   },
@@ -145,14 +144,14 @@ const ADDON_CONFIG = [
     key: 'StreamingTV' as const,
     label: 'Streaming TV',
     desc: 'Live HD television package',
-    impact: 'Entertainment Add-on',
+    impact: 'Entertainment',
     icon: Tv,
   },
   {
     key: 'StreamingMovies' as const,
     label: 'Streaming Movies',
-    desc: 'On-demand movie library',
-    impact: 'Entertainment Add-on',
+    desc: 'On-demand film catalog',
+    impact: 'Entertainment',
     icon: Film,
   },
 ];
@@ -169,13 +168,17 @@ interface CustomerFormProps {
 export const CustomerForm: React.FC<CustomerFormProps> = ({
   formData,
   onChange,
-  onSelectPreset,
-  activePreset,
   disabled = false,
-  showPresetPicker = true,
 }) => {
   const setField = <K extends keyof PredictionPayload>(key: K, value: PredictionPayload[K]) => {
-    onChange({ ...formData, [key]: value });
+    const next = { ...formData, [key]: value };
+    // Auto-update TotalCharges when tenure or monthly charges change
+    if (key === 'tenure' || key === 'MonthlyCharges') {
+      const tenureVal = key === 'tenure' ? Number(value) : formData.tenure;
+      const monthlyVal = key === 'MonthlyCharges' ? Number(value) : formData.MonthlyCharges;
+      next.TotalCharges = Math.round(tenureVal * monthlyVal * 100) / 100;
+    }
+    onChange(next);
   };
 
   const handleInternetServiceChange = (value: string) => {
@@ -191,20 +194,6 @@ export const CustomerForm: React.FC<CustomerFormProps> = ({
     onChange(next);
   };
 
-  const handlePhoneServiceChange = (value: string) => {
-    const next = {
-      ...formData,
-      PhoneService: value,
-      MultipleLines:
-        value === 'No'
-          ? 'No phone service'
-          : formData.MultipleLines === 'No phone service'
-          ? 'No'
-          : formData.MultipleLines,
-    };
-    onChange(next);
-  };
-
   const toggleAddon = (key: (typeof ADDON_CONFIG)[number]['key']) => {
     if (disabled || formData.InternetService === 'No') return;
     const current = formData[key];
@@ -213,252 +202,228 @@ export const CustomerForm: React.FC<CustomerFormProps> = ({
   };
 
   return (
-    <div className="space-y-6">
-      {showPresetPicker && (
-      <div className="space-y-2.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-100 text-[11px] font-bold text-indigo-700">
-              1
-            </span>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              Select Customer Archetype
-            </h3>
-          </div>
-          <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">
-            Quick-load production benchmark personas
-          </span>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-3">
-          {Object.entries(PRESETS).map(([key, preset]) => {
-            const isSelected = activePreset === key;
-            const badgeColorMap = {
-              rose: 'bg-rose-50 text-rose-700 border-rose-200',
-              amber: 'bg-amber-50 text-amber-700 border-amber-200',
-              emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-            };
-
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => onSelectPreset(key)}
-                disabled={disabled}
-                className={`relative group rounded-xl border p-3.5 text-left transition-all duration-200 cursor-pointer ${
-                  isSelected
-                    ? 'border-indigo-600 bg-linear-to-br from-indigo-50/90 via-white to-indigo-50/40 shadow-sm ring-2 ring-indigo-500/20'
-                    : 'border-slate-200 bg-white hover:border-indigo-300 hover:bg-slate-50/80'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-1 mb-1.5">
-                  <span
-                    className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                      badgeColorMap[preset.riskColor]
-                    }`}
-                  >
-                    {preset.riskColor === 'rose' && <AlertTriangle className="h-2.5 w-2.5" />}
-                    {preset.riskColor === 'emerald' && <Check className="h-2.5 w-2.5" />}
-                    {preset.riskTag}
-                  </span>
-                  {isSelected && (
-                    <span className="flex h-4 w-4 items-center justify-center rounded-full bg-indigo-600 text-white text-[10px]">
-                      ✓
-                    </span>
-                  )}
-                </div>
-
-                <p className="text-xs font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
-                  {preset.label}
-                </p>
-
-                <p className="mt-1 text-[11px] leading-snug text-slate-500">
-                  {preset.description}
-                </p>
-
-                <div className="mt-2.5 pt-2 border-t border-slate-100/80 text-[10px] text-slate-400 italic">
-                  💡 {preset.highlight}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      )}
-
-      {/* 2. ACCOUNT & CORE FINANCIAL SERVICES */}
-      <div className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-xs space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
-              <CreditCard className="h-3.5 w-3.5" />
+    <div className="space-y-6 animate-fade-in">
+      {/* 1. FINANCIAL & CONTRACT ARCHITECTURE */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-xs space-y-5">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+              <CreditCard className="h-4 w-4" />
             </div>
             <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                Account &amp; Financial Contract
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                Financial Contract &amp; Billing
               </h4>
               <p className="text-[11px] text-slate-400">
-                Tenure, billing commitment, and connection infrastructure
+                Core subscription parameters and primary churn drivers
               </p>
             </div>
           </div>
-          <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
-            Primary Churn Drivers
+          <span className="hidden sm:inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-200/60">
+            <AlertTriangle className="h-3 w-3" /> Key Risk Drivers
           </span>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {/* Tenure */}
-          <div className="space-y-1">
-            <div className="flex justify-between items-center text-xs font-semibold text-slate-700">
-              <span>Tenure (Months)</span>
-              <span className="font-mono text-indigo-600 font-bold">{formData.tenure} mo</span>
+        {/* Sliders Grid: Tenure & Monthly Charges */}
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          {/* Tenure Slider */}
+          <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-700">Customer Tenure</label>
+              <div className="flex items-center gap-1.5">
+                <span className="font-mono text-sm font-black text-indigo-600">
+                  {formData.tenure} mo
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  ({(formData.tenure / 12).toFixed(1)} yrs)
+                </span>
+              </div>
             </div>
-            <div className="relative">
-              <input
-                type="number"
-                min="0"
-                max="100"
-                value={formData.tenure}
-                disabled={disabled}
-                onChange={(e) => setField('tenure', Math.max(0, parseInt(e.target.value) || 0))}
-                className="w-full rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 text-xs font-semibold text-slate-800 transition focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-50"
-              />
-            </div>
-            <p className="text-[10px] text-slate-400">Months customer has stayed with service</p>
-          </div>
 
-          {/* Monthly Charges */}
-          <div className="space-y-1">
-            <div className="flex justify-between items-center text-xs font-semibold text-slate-700">
-              <span>Monthly Charges ($)</span>
-              <span className="font-mono text-slate-600">${Number(formData.MonthlyCharges).toFixed(2)}</span>
-            </div>
-            <div className="relative">
-              <input
-                type="number"
-                min="0"
-                step="0.5"
-                value={formData.MonthlyCharges}
-                disabled={disabled}
-                onChange={(e) => setField('MonthlyCharges', parseFloat(e.target.value) || 0)}
-                className="w-full rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 text-xs font-semibold text-slate-800 transition focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-50"
-              />
-            </div>
-            <p className="text-[10px] text-slate-400">Recurring monthly subscription fee</p>
-          </div>
-
-          {/* Total Charges */}
-          <div className="space-y-1">
-            <div className="flex justify-between items-center text-xs font-semibold text-slate-700">
-              <span>Total Charges ($)</span>
-              <span className="font-mono text-slate-600">${Number(formData.TotalCharges).toFixed(2)}</span>
-            </div>
-            <div className="relative">
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value={formData.TotalCharges}
-                disabled={disabled}
-                onChange={(e) => setField('TotalCharges', parseFloat(e.target.value) || 0)}
-                className="w-full rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 text-xs font-semibold text-slate-800 transition focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-50"
-              />
-            </div>
-            <p className="text-[10px] text-slate-400">Cumulative historical spend (LTV)</p>
-          </div>
-
-          {/* Contract Type */}
-          <div className="space-y-1">
-            <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
-              <span>Contract Type</span>
-              {formData.Contract === 'Month-to-month' && (
-                <span className="text-[10px] text-rose-600 font-bold">High Risk</span>
-              )}
-            </div>
-            <select
-              value={formData.Contract}
+            <input
+              type="range"
+              min="0"
+              max="72"
+              step="1"
+              value={formData.tenure}
               disabled={disabled}
-              onChange={(e) => setField('Contract', e.target.value as PredictionPayload['Contract'])}
-              className={`w-full rounded-lg border p-2.5 text-xs font-semibold transition focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-50 ${
-                formData.Contract === 'Month-to-month'
-                  ? 'border-amber-300 bg-amber-50/40 text-slate-800'
-                  : 'border-slate-200 bg-slate-50/70 text-slate-800 focus:border-indigo-500 focus:bg-white'
-              }`}
-            >
-              <option value="Month-to-month">Month-to-month (No lock-in)</option>
-              <option value="One year">One year (Moderate lock-in)</option>
-              <option value="Two year">Two year (High retention lock-in)</option>
-            </select>
+              onChange={(e) => setField('tenure', parseInt(e.target.value) || 0)}
+              className="w-full cursor-pointer h-2 bg-slate-200 rounded-lg appearance-none"
+            />
+
+            <div className="flex justify-between items-center text-[10px] text-slate-400 pt-0.5">
+              <span>0 mo (New)</span>
+              <span>36 mo (3 yrs)</span>
+              <span>72 mo (6 yrs)</span>
+            </div>
           </div>
 
-          {/* Internet Service */}
-          <div className="space-y-1">
-            <label className="block text-xs font-semibold text-slate-700">
-              Internet Service
-            </label>
-            <select
-              value={formData.InternetService}
-              disabled={disabled}
-              onChange={(e) => handleInternetServiceChange(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 text-xs font-semibold text-slate-800 transition focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-50"
-            >
-              <option value="Fiber optic">Fiber optic (High speed / High churn)</option>
-              <option value="DSL">DSL (Stable copper)</option>
-              <option value="No">No Internet Service</option>
-            </select>
-          </div>
+          {/* Monthly Charges Slider */}
+          <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-700">Monthly Subscription</label>
+              <div className="flex items-center gap-1.5">
+                <span className="font-mono text-sm font-black text-slate-900">
+                  ${Number(formData.MonthlyCharges).toFixed(2)}
+                </span>
+                <span className="text-[10px] text-slate-400">/month</span>
+              </div>
+            </div>
 
-          {/* Payment Method */}
-          <div className="space-y-1">
-            <label className="block text-xs font-semibold text-slate-700">
-              Payment Method
-            </label>
-            <select
-              value={formData.PaymentMethod}
+            <input
+              type="range"
+              min="18"
+              max="120"
+              step="0.5"
+              value={formData.MonthlyCharges}
               disabled={disabled}
-              onChange={(e) => setField('PaymentMethod', e.target.value as PredictionPayload['PaymentMethod'])}
-              className="w-full rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 text-xs font-semibold text-slate-800 transition focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-50"
-            >
-              <option value="Electronic check">Electronic check (Highest churn)</option>
-              <option value="Mailed check">Mailed check</option>
-              <option value="Bank transfer (automatic)">Bank transfer (automatic)</option>
-              <option value="Credit card (automatic)">Credit card (automatic)</option>
-            </select>
+              onChange={(e) => setField('MonthlyCharges', parseFloat(e.target.value) || 18)}
+              className="w-full cursor-pointer h-2 bg-slate-200 rounded-lg appearance-none"
+            />
+
+            <div className="flex justify-between items-center text-[10px] text-slate-400 pt-0.5">
+              <span>$18.00 (Basic)</span>
+              <span>$70.00 (Avg)</span>
+              <span>$120.00 (Premium)</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Contract Type Segmented Buttons */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+            <span>Contract Commitment Duration</span>
+            {formData.Contract === 'Month-to-month' ? (
+              <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                High Exit Sensitivity
+              </span>
+            ) : (
+              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                Retention Lock-in Active
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { value: 'Month-to-month', label: 'Month-to-Month', desc: 'No lock-in' },
+              { value: 'One year', label: 'One Year', desc: '12-mo plan' },
+              { value: 'Two year', label: 'Two Year', desc: '24-mo plan' },
+            ].map((option) => {
+              const active = formData.Contract === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => setField('Contract', option.value as PredictionPayload['Contract'])}
+                  className={`rounded-xl border p-3 text-center transition-all cursor-pointer ${
+                    active
+                      ? 'border-indigo-600 bg-indigo-50/80 text-indigo-900 font-bold ring-2 ring-indigo-500/20 shadow-xs'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <p className="text-xs font-bold">{option.label}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{option.desc}</p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Internet Service Segmented Buttons */}
+        <div className="space-y-2">
+          <label className="block text-xs font-bold text-slate-700">
+            Internet Connection Infrastructure
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { value: 'Fiber optic', label: 'Fiber Optic', desc: 'High speed' },
+              { value: 'DSL', label: 'DSL', desc: 'Stable copper' },
+              { value: 'No', label: 'No Internet', desc: 'Voice only' },
+            ].map((option) => {
+              const active = formData.InternetService === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => handleInternetServiceChange(option.value)}
+                  className={`rounded-xl border p-3 text-center transition-all cursor-pointer ${
+                    active
+                      ? 'border-indigo-600 bg-indigo-50/80 text-indigo-900 font-bold ring-2 ring-indigo-500/20 shadow-xs'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <p className="text-xs font-bold">{option.label}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{option.desc}</p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Payment Method Segmented Buttons */}
+        <div className="space-y-2">
+          <label className="block text-xs font-bold text-slate-700">Payment &amp; Billing Method</label>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {[
+              { value: 'Electronic check', label: 'Electronic Check', note: 'High Churn' },
+              { value: 'Credit card (automatic)', label: 'Credit Card', note: 'Auto-pay' },
+              { value: 'Bank transfer (automatic)', label: 'Bank Transfer', note: 'Auto-pay' },
+              { value: 'Mailed check', label: 'Mailed Check', note: 'Manual' },
+            ].map((option) => {
+              const active = formData.PaymentMethod === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => setField('PaymentMethod', option.value as PredictionPayload['PaymentMethod'])}
+                  className={`rounded-xl border p-2.5 text-center transition-all cursor-pointer ${
+                    active
+                      ? 'border-indigo-600 bg-indigo-50 text-indigo-900 font-bold shadow-xs'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <p className="text-[11px] font-bold truncate">{option.label}</p>
+                  <p className="text-[9px] text-slate-400 mt-0.5">{option.note}</p>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
 
-      {/* 3. SUPPORT & ADD-ON FEATURES (INTERACTIVE TOGGLE TILES) */}
-      <div className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-xs space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
-              <Layers className="h-3.5 w-3.5" />
+      {/* 2. ACTIONABLE SUPPORT & SECURITY ADD-ON ECOSYSTEM */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-xs space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+              <Layers className="h-4 w-4" />
             </div>
             <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                Support &amp; Add-on Ecosystem
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                Actionable Ecosystem Levers
               </h4>
               <p className="text-[11px] text-slate-400">
-                Click cards to toggle protection &amp; entertainment services
+                Click any tile to toggle protection, technical support, and entertainment services
               </p>
             </div>
           </div>
-          <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-100">
-            <Sparkles className="h-3 w-3" /> Actionable Levers
+          <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-100">
+            <Sparkles className="h-3 w-3" /> Counterfactual Levers
           </span>
         </div>
 
         {formData.InternetService === 'No' ? (
-          <div className="rounded-lg bg-slate-50 p-4 text-center text-xs text-slate-500 border border-dashed border-slate-200">
+          <div className="rounded-xl bg-slate-50 p-4 text-center text-xs text-slate-500 border border-dashed border-slate-200">
             Internet add-on features are disabled because <strong>No Internet Service</strong> is selected.
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {ADDON_CONFIG.map(({ key, label, desc, impact, icon: Icon }) => {
               const isEnabled = formData[key] === 'Yes';
-              const isHighImpact = impact === 'High Retention Impact';
+              const isHighImpact = impact === 'High Retention Lever';
 
               return (
                 <button
@@ -466,15 +431,15 @@ export const CustomerForm: React.FC<CustomerFormProps> = ({
                   type="button"
                   onClick={() => toggleAddon(key)}
                   disabled={disabled}
-                  className={`group relative flex flex-col justify-between rounded-xl border p-3.5 text-left transition-all duration-200 cursor-pointer ${
+                  className={`group relative flex flex-col justify-between rounded-2xl border p-4 text-left transition-all cursor-pointer ${
                     isEnabled
-                      ? 'border-indigo-600 bg-linear-to-br from-indigo-50/80 to-white shadow-xs ring-1 ring-indigo-500/30'
-                      : 'border-slate-200/90 bg-slate-50/40 hover:border-indigo-200 hover:bg-white'
+                      ? 'border-indigo-600 bg-linear-to-br from-indigo-50/90 to-white shadow-xs ring-1 ring-indigo-500/20'
+                      : 'border-slate-200 bg-slate-50/40 hover:border-indigo-200 hover:bg-white'
                   }`}
                 >
                   <div className="flex items-start justify-between">
                     <div
-                      className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+                      className={`flex h-8 w-8 items-center justify-center rounded-xl transition-colors ${
                         isEnabled
                           ? 'bg-indigo-600 text-white shadow-xs'
                           : 'bg-slate-100 text-slate-500 group-hover:text-indigo-600'
@@ -482,17 +447,18 @@ export const CustomerForm: React.FC<CustomerFormProps> = ({
                     >
                       <Icon className="h-4 w-4" />
                     </div>
+
                     <div className="flex items-center gap-1.5">
                       {isHighImpact && (
-                        <span className="text-[9px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
-                          Key
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-100/80 px-1.5 py-0.5 rounded">
+                          Key Lever
                         </span>
                       )}
                       <span
-                        className={`h-4 w-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                        className={`h-5 w-5 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
                           isEnabled
                             ? 'bg-indigo-600 text-white'
-                            : 'border border-slate-300 text-transparent'
+                            : 'border border-slate-300 text-transparent bg-white'
                         }`}
                       >
                         ✓
@@ -502,16 +468,16 @@ export const CustomerForm: React.FC<CustomerFormProps> = ({
 
                   <div className="mt-3">
                     <div className="flex items-center justify-between">
-                      <p className="text-xs font-bold text-slate-800">{label}</p>
+                      <p className="text-xs font-bold text-slate-900">{label}</p>
                       <span
-                        className={`text-[10px] font-bold ${
-                          isEnabled ? 'text-indigo-600' : 'text-slate-400'
+                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                          isEnabled ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'
                         }`}
                       >
-                        {isEnabled ? 'ACTIVE' : 'NONE'}
+                        {isEnabled ? 'ACTIVE' : 'OFF'}
                       </span>
                     </div>
-                    <p className="mt-0.5 text-[11px] text-slate-400">{desc}</p>
+                    <p className="mt-1 text-[11px] leading-snug text-slate-500">{desc}</p>
                   </div>
                 </button>
               );
@@ -520,17 +486,17 @@ export const CustomerForm: React.FC<CustomerFormProps> = ({
         )}
       </div>
 
-      {/* 4. HOUSEHOLD & DEMOGRAPHICS (COLLAPSIBLE WITH PROGRESSIVE DISCLOSURE) */}
-      <details className="group rounded-xl border border-slate-200/90 bg-white p-5 shadow-xs transition-all">
-        <summary className="flex cursor-pointer items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-700 select-none">
-          <div className="flex items-center gap-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
-              <Users className="h-3.5 w-3.5" />
+      {/* 3. HOUSEHOLD & DEMOGRAPHICS */}
+      <details className="group rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-xs transition-all">
+        <summary className="flex cursor-pointer items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-800 select-none">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+              <Users className="h-4 w-4" />
             </div>
             <div>
               <span>Household &amp; Demographics</span>
-              <span className="ml-2 text-[10px] font-normal text-slate-400 normal-case">
-                (Life-stage stickiness &amp; communication channel)
+              <span className="ml-2 text-[11px] font-normal text-slate-400 normal-case">
+                (Life-stage stickiness)
               </span>
             </div>
           </div>
@@ -539,116 +505,131 @@ export const CustomerForm: React.FC<CustomerFormProps> = ({
           </span>
         </summary>
 
-        <div className="mt-4 grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3 border-t border-slate-100 pt-4">
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 border-t border-slate-100 pt-4">
           {/* Senior Citizen */}
-          <div className="space-y-1">
-            <label className="block text-xs font-semibold text-slate-700">Senior Citizen</label>
-            <select
-              value={formData.SeniorCitizen}
-              disabled={disabled}
-              onChange={(e) =>
-                setField('SeniorCitizen', parseInt(e.target.value) as PredictionPayload['SeniorCitizen'])
-              }
-              className="w-full rounded-lg border border-slate-200 bg-slate-50/70 p-2 text-xs font-medium text-slate-800 transition focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
-            >
-              <option value={0}>No (Under 65)</option>
-              <option value={1}>Yes (65+)</option>
-            </select>
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-slate-700">Senior Citizen Status</label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {[
+                { val: 0, label: 'Under 65' },
+                { val: 1, label: '65+ Senior' },
+              ].map((opt) => (
+                <button
+                  key={opt.val}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => setField('SeniorCitizen', opt.val as PredictionPayload['SeniorCitizen'])}
+                  className={`rounded-lg border py-2 text-xs font-semibold text-center transition ${
+                    formData.SeniorCitizen === opt.val
+                      ? 'border-indigo-600 bg-indigo-50 text-indigo-900 font-bold'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Gender */}
-          <div className="space-y-1">
-            <label className="block text-xs font-semibold text-slate-700">Gender</label>
-            <select
-              value={formData.gender}
-              disabled={disabled}
-              onChange={(e) => setField('gender', e.target.value as PredictionPayload['gender'])}
-              className="w-full rounded-lg border border-slate-200 bg-slate-50/70 p-2 text-xs font-medium text-slate-800 transition focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
-            >
-              <option value="Female">Female</option>
-              <option value="Male">Male</option>
-            </select>
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-slate-700">Gender</label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {['Female', 'Male'].map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => setField('gender', g as PredictionPayload['gender'])}
+                  className={`rounded-lg border py-2 text-xs font-semibold text-center transition ${
+                    formData.gender === g
+                      ? 'border-indigo-600 bg-indigo-50 text-indigo-900 font-bold'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {g}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Partner */}
-          <div className="space-y-1">
-            <label className="block text-xs font-semibold text-slate-700">Partner</label>
-            <select
-              value={formData.Partner}
-              disabled={disabled}
-              onChange={(e) => setField('Partner', e.target.value as PredictionPayload['Partner'])}
-              className="w-full rounded-lg border border-slate-200 bg-slate-50/70 p-2 text-xs font-medium text-slate-800 transition focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
-            >
-              <option value="No">No Partner</option>
-              <option value="Yes">Has Partner</option>
-            </select>
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-slate-700">Partner</label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {[
+                { val: 'No', label: 'No Partner' },
+                { val: 'Yes', label: 'Has Partner' },
+              ].map((opt) => (
+                <button
+                  key={opt.val}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => setField('Partner', opt.val as PredictionPayload['Partner'])}
+                  className={`rounded-lg border py-2 text-xs font-semibold text-center transition ${
+                    formData.Partner === opt.val
+                      ? 'border-indigo-600 bg-indigo-50 text-indigo-900 font-bold'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Dependents */}
-          <div className="space-y-1">
-            <label className="block text-xs font-semibold text-slate-700">Dependents</label>
-            <select
-              value={formData.Dependents}
-              disabled={disabled}
-              onChange={(e) => setField('Dependents', e.target.value as PredictionPayload['Dependents'])}
-              className="w-full rounded-lg border border-slate-200 bg-slate-50/70 p-2 text-xs font-medium text-slate-800 transition focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
-            >
-              <option value="No">No Dependents</option>
-              <option value="Yes">Has Dependents</option>
-            </select>
-          </div>
-
-          {/* Phone Service */}
-          <div className="space-y-1">
-            <label className="block text-xs font-semibold text-slate-700">Phone Service</label>
-            <select
-              value={formData.PhoneService}
-              disabled={disabled}
-              onChange={(e) => handlePhoneServiceChange(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 bg-slate-50/70 p-2 text-xs font-medium text-slate-800 transition focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
-            >
-              <option value="Yes">Yes</option>
-              <option value="No">No</option>
-            </select>
-          </div>
-
-          {/* Multiple Lines */}
-          <div className="space-y-1">
-            <label className="block text-xs font-semibold text-slate-700">Multiple Lines</label>
-            <select
-              value={formData.MultipleLines}
-              disabled={disabled}
-              onChange={(e) => setField('MultipleLines', e.target.value as PredictionPayload['MultipleLines'])}
-              className="w-full rounded-lg border border-slate-200 bg-slate-50/70 p-2 text-xs font-medium text-slate-800 transition focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
-            >
-              {formData.PhoneService === 'No' ? (
-                <option value="No phone service">No phone service</option>
-              ) : (
-                <>
-                  <option value="No">Single Line</option>
-                  <option value="Yes">Multiple Lines</option>
-                </>
-              )}
-            </select>
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-slate-700">Dependents</label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {[
+                { val: 'No', label: 'No Dependents' },
+                { val: 'Yes', label: 'Has Dependents' },
+              ].map((opt) => (
+                <button
+                  key={opt.val}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => setField('Dependents', opt.val as PredictionPayload['Dependents'])}
+                  className={`rounded-lg border py-2 text-xs font-semibold text-center transition ${
+                    formData.Dependents === opt.val
+                      ? 'border-indigo-600 bg-indigo-50 text-indigo-900 font-bold'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Paperless Billing */}
-          <div className="space-y-1">
-            <label className="block text-xs font-semibold text-slate-700">Paperless Billing</label>
-            <select
-              value={formData.PaperlessBilling}
-              disabled={disabled}
-              onChange={(e) =>
-                setField('PaperlessBilling', e.target.value as PredictionPayload['PaperlessBilling'])
-              }
-              className="w-full rounded-lg border border-slate-200 bg-slate-50/70 p-2 text-xs font-medium text-slate-800 transition focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
-            >
-              <option value="Yes">Yes (Digital invoice)</option>
-              <option value="No">No (Paper invoice)</option>
-            </select>
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-slate-700">Paperless Billing</label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {[
+                { val: 'Yes', label: 'Digital (Paperless)' },
+                { val: 'No', label: 'Paper Invoices' },
+              ].map((opt) => (
+                <button
+                  key={opt.val}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => setField('PaperlessBilling', opt.val as PredictionPayload['PaperlessBilling'])}
+                  className={`rounded-lg border py-2 text-xs font-semibold text-center transition ${
+                    formData.PaperlessBilling === opt.val
+                      ? 'border-indigo-600 bg-indigo-50 text-indigo-900 font-bold'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </details>
     </div>
   );
 };
+
