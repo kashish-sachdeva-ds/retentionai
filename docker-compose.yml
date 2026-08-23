@@ -25,7 +25,7 @@ services:
       - ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://localhost:8000
     volumes:
       - ./src:/app/src
-      - ./data:/app/data:ro
+      - ./data:/app/data
       - ./models:/app/models
     depends_on:
       redis:

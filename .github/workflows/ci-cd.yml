@@ -102,7 +102,7 @@ jobs:
         run: docker compose build
 
       - name: Bring up stack
-        run: ALLOW_SYNTHETIC_DATA=1 docker compose up -d
+        run: ALLOW_SYNTHETIC_DATA=1 FORCE_RETRAIN=1 docker compose up -d
 
       - name: Wait for API health check
         run: timeout 120 bash -c 'until curl -sf http://localhost:8000/health || curl -sf http://localhost:8000/api/v1/health; do sleep 3; done'

@@ -7,6 +7,7 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
+  X,
 } from 'lucide-react';
 import { getExperiments, getModelRegistry, listAuditRecords, updateAuditReview } from '../api';
 import type { AuditRecordData, ModelRegistryResponse } from '../types';
@@ -15,6 +16,7 @@ export function GovernancePage() {
   const [activeTab, setActiveTab] = useState<'audit' | 'lineage' | 'registry' | 'adrs'>('audit');
   const [auditRecords, setAuditRecords] = useState<AuditRecordData[]>([]);
   const [selectedAudit, setSelectedAudit] = useState<AuditRecordData | null>(null);
+  const [modalAudit, setModalAudit] = useState<AuditRecordData | null>(null);
   const [registry, setRegistry] = useState<ModelRegistryResponse | null>(null);
   const [lineage, setLineage] = useState<Record<string, string>>({});
   const [searchAudit, setSearchAudit] = useState('');
@@ -47,11 +49,27 @@ export function GovernancePage() {
     void loadData();
   }, []);
 
+  const handleSelectAudit = (rec: AuditRecordData) => {
+    setSelectedAudit(rec);
+    setTimeout(() => {
+      const el = document.getElementById('audit-inspector-card');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 50);
+  };
+
+  const handleOpenModal = (rec: AuditRecordData) => {
+    setSelectedAudit(rec);
+    setModalAudit(rec);
+  };
+
   const handleReviewStatusChange = async (decisionId: string, newStatus: 'approved' | 'rejected' | 'escalated') => {
     setReviewUpdating(true);
     try {
       const updated = await updateAuditReview(decisionId, newStatus, 'ops_lead_reviewer');
-      setSelectedAudit(updated);
+      setSelectedAudit((prev) => (prev?.decision_id === decisionId ? updated : prev));
+      setModalAudit((prev) => (prev?.decision_id === decisionId ? updated : prev));
       setAuditRecords((prev) => prev.map((r) => (r.decision_id === decisionId ? updated : r)));
     } catch (err) {
       console.error('Failed to update review status:', err);
@@ -120,7 +138,7 @@ export function GovernancePage() {
         <section className="space-y-6">
           {/* Prominent Featured Audit Record Inspector */}
           {selectedAudit && (
-            <div className="rounded-3xl border border-indigo-200 bg-linear-to-br from-white via-indigo-50/20 to-slate-50 p-6 shadow-xs sm:p-8 space-y-6">
+            <div id="audit-inspector-card" className="rounded-3xl border border-indigo-200 bg-linear-to-br from-white via-indigo-50/20 to-slate-50 p-6 shadow-xs sm:p-8 space-y-6 scroll-mt-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-indigo-100 pb-5">
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-md shadow-indigo-100">
@@ -330,7 +348,7 @@ export function GovernancePage() {
                       filteredAudit.map((rec) => (
                         <tr
                           key={rec.decision_id}
-                          onClick={() => setSelectedAudit(rec)}
+                          onClick={() => handleSelectAudit(rec)}
                           className={`cursor-pointer transition ${
                             selectedAudit?.decision_id === rec.decision_id
                               ? 'bg-indigo-50/70 font-semibold'
@@ -358,11 +376,12 @@ export function GovernancePage() {
                           </td>
                           <td className="py-3 px-4 text-right font-sans">
                             <button
+                              type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setSelectedAudit(rec);
+                                handleOpenModal(rec);
                               }}
-                              className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-700 hover:bg-indigo-100 hover:text-indigo-800"
+                              className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-600 hover:text-white transition shadow-2xs"
                             >
                               <span>View</span>
                               <ArrowRight className="h-3 w-3" />
@@ -495,6 +514,165 @@ export function GovernancePage() {
             ))}
           </div>
         </section>
+      )}
+
+      {/* Audit Record Inspection Modal */}
+      {modalAudit && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
+          onClick={() => setModalAudit(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-2xl rounded-3xl bg-white p-6 sm:p-8 shadow-2xl border border-slate-200 space-y-6 max-h-[90vh] overflow-y-auto"
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-md shadow-indigo-100">
+                  <FileCheck2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="text-[11px] font-extrabold uppercase tracking-wider text-indigo-600">Decision Governance Inspector</div>
+                  <h3 className="text-xl font-mono font-extrabold text-slate-900">
+                    AUDIT RECORD — {modalAudit.decision_id}
+                  </h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalAudit(null)}
+                className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Metrics Grid */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Model Inference</div>
+                <div className="flex justify-between items-baseline">
+                  <span className="text-xs text-slate-500">Raw Churn Probability:</span>
+                  <span className="font-mono text-sm font-bold text-slate-700">
+                    {((modalAudit.raw_probability ?? modalAudit.calibrated_probability) * 100).toFixed(2)}%
+                  </span>
+                </div>
+                <div className="flex justify-between items-baseline border-t border-slate-100 pt-2">
+                  <span className="text-xs text-slate-500">Calibrated Risk:</span>
+                  <span className="font-mono text-base font-extrabold text-indigo-600">
+                    {(modalAudit.calibrated_probability * 100).toFixed(2)}%
+                  </span>
+                </div>
+                <div className="flex justify-between items-baseline border-t border-slate-100 pt-2">
+                  <span className="text-xs text-slate-500">Conformal Set:</span>
+                  <span className="font-mono text-xs font-bold text-slate-900">
+                    {`{${modalAudit.conformal_set.join(', ')}}`}
+                  </span>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Decision Provenance</div>
+                <div className="flex justify-between items-baseline">
+                  <span className="text-xs text-slate-500">Subscriber:</span>
+                  <span className="font-mono text-xs font-bold text-slate-900">{modalAudit.customer_id}</span>
+                </div>
+                <div className="flex justify-between items-baseline border-t border-slate-100 pt-2">
+                  <span className="text-xs text-slate-500">Serving Model:</span>
+                  <span className="font-mono text-xs font-bold text-slate-800">{modalAudit.model_version || 'xgb-v12b'}</span>
+                </div>
+                <div className="flex justify-between items-baseline border-t border-slate-100 pt-2">
+                  <span className="text-xs text-slate-500">Trace ID:</span>
+                  <span className="font-mono text-xs font-bold text-indigo-600">{modalAudit.trace_id || 'D-UNTRACKED'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Recommended Action Card */}
+            <div className="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4 space-y-1">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-700">Recommended Next Step</span>
+              <p className="text-sm font-bold text-slate-900">{modalAudit.recommended_action}</p>
+              <div className="text-[11px] text-slate-500 flex gap-4 pt-1">
+                <span>Priority Score: <strong className="text-slate-800 font-mono">{modalAudit.priority_score.toFixed(1)}</strong></span>
+                <span>Confidence: <strong className="text-slate-800">{modalAudit.decision_confidence || 'High'}</strong></span>
+                <span>Timestamp: <strong className="text-slate-800 font-mono">{modalAudit.timestamp.slice(0, 19).replace('T', ' ')} UTC</strong></span>
+              </div>
+            </div>
+
+            {/* Human Review Section */}
+            <div className="rounded-2xl border border-slate-200 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-700">Human-in-the-Loop Review Status:</span>
+                <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
+                  modalAudit.human_review_status === 'approved'
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : modalAudit.human_review_status === 'rejected'
+                    ? 'bg-rose-100 text-rose-800'
+                    : 'bg-amber-100 text-amber-800'
+                }`}>
+                  {modalAudit.human_review_status}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleReviewStatusChange(modalAudit.decision_id, 'approved')}
+                  disabled={reviewUpdating || modalAudit.human_review_status === 'approved'}
+                  className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 transition"
+                >
+                  Approve Offer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleReviewStatusChange(modalAudit.decision_id, 'rejected')}
+                  disabled={reviewUpdating || modalAudit.human_review_status === 'rejected'}
+                  className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50 transition"
+                >
+                  Override / Reject
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleReviewStatusChange(modalAudit.decision_id, 'escalated')}
+                  disabled={reviewUpdating || modalAudit.human_review_status === 'escalated'}
+                  className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700 hover:bg-amber-100 disabled:opacity-50 transition"
+                >
+                  Escalate
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-between border-t border-slate-100 pt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  const blob = new Blob([JSON.stringify(modalAudit, null, 2)], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `audit_${modalAudit.decision_id}.json`;
+                  a.click();
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition"
+              >
+                <Download className="h-3.5 w-3.5 text-slate-400" />
+                <span>Export JSON</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setModalAudit(null)}
+                className="rounded-xl bg-slate-900 px-5 py-2 text-xs font-bold text-white hover:bg-slate-800 transition"
+              >
+                Done / Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   );
