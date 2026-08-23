@@ -302,6 +302,10 @@ export interface DriftSnapshot {
   model_version?: string;
   reference_version?: string;
   source_type?: string;
+  window_start?: string;
+  window_end?: string;
+  prediction_event_start_id?: number;
+  prediction_event_end_id?: number;
   psi: number;
   psi_interpretation: string;
   ks_statistic: number;
@@ -315,6 +319,12 @@ export interface DriftResponse {
   n_observations?: number;
   n_recent_predictions?: number;
   minimum_required?: number;
+  model_version?: string;
+  reference_version?: string;
+  window_start?: string;
+  window_end?: string;
+  prediction_event_start_id?: number;
+  prediction_event_end_id?: number;
   psi?: number;
   psi_interpretation?: string;
   ks_statistic?: number;

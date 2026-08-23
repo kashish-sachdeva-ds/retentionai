@@ -1141,6 +1141,24 @@ def get_audit_record(decision_id: str):
     return record.to_dict()
 
 
+class AuditReviewUpdateRequest(BaseModel):
+    status: Literal["pending", "approved", "rejected", "escalated"]
+    reviewer: str = "ops_reviewer"
+
+
+@v1.patch("/audit/{decision_id}/review", tags=["Governance"], summary="Update human review status")
+def update_audit_review_status(
+    decision_id: str,
+    payload: AuditReviewUpdateRequest,
+):
+    """Update human-in-the-loop review status of an audit record."""
+    updated = audit_store.update_review_status(decision_id, payload.status, payload.reviewer)
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Audit record {decision_id} not found")
+    return updated.to_dict()
+
+
+
 # ---------------------------------------------------------------------------
 # Model Registry & Experiments
 # ---------------------------------------------------------------------------

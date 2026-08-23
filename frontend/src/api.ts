@@ -157,6 +157,18 @@ export function getAuditRecord(decisionId: string) {
   return request<AuditRecordData>(`/audit/${encodeURIComponent(decisionId)}`);
 }
 
+export function updateAuditReview(
+  decisionId: string,
+  status: 'pending' | 'approved' | 'rejected' | 'escalated',
+  reviewer: string = 'ops_reviewer'
+) {
+  return request<AuditRecordData>(`/audit/${encodeURIComponent(decisionId)}/review`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status, reviewer }),
+  });
+}
+
 export function getModelCard() {
   return request<ModelCardResponse>('/model-card');
 }

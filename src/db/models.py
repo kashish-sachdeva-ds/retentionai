@@ -140,7 +140,11 @@ class DriftSnapshotModel(Base):
     period_label = Column(String(64), nullable=False)
     model_version = Column(String(64), nullable=False)
     reference_version = Column(String(64), nullable=False)
-    source_type = Column(String(32), nullable=False, default="live_telemetry")  # "live_telemetry" or "demo_simulation"
+    source_type = Column(String(32), nullable=False, default="live_telemetry")  # "live_telemetry" or "benchmark_holdout"
+    window_start = Column(String(64), nullable=True)
+    window_end = Column(String(64), nullable=True)
+    prediction_event_start_id = Column(Integer, nullable=True)
+    prediction_event_end_id = Column(Integer, nullable=True)
     psi = Column(Float, nullable=False)
     psi_interpretation = Column(String(64), nullable=False)
     ks_statistic = Column(Float, nullable=False)
@@ -156,6 +160,10 @@ class DriftSnapshotModel(Base):
             "model_version": self.model_version,
             "reference_version": self.reference_version,
             "source_type": self.source_type,
+            "window_start": self.window_start,
+            "window_end": self.window_end,
+            "prediction_event_start_id": self.prediction_event_start_id,
+            "prediction_event_end_id": self.prediction_event_end_id,
             "psi": self.psi,
             "psi_interpretation": self.psi_interpretation,
             "ks_statistic": self.ks_statistic,

@@ -118,6 +118,10 @@ def create_drift_snapshot(
     ks_drift_detected: bool,
     n_samples: int,
     source_type: str = "live_telemetry",
+    window_start: str | None = None,
+    window_end: str | None = None,
+    prediction_event_start_id: int | None = None,
+    prediction_event_end_id: int | None = None,
 ) -> dict[str, Any]:
     """Persist a point-in-time drift calculation to the database."""
     try:
@@ -128,6 +132,10 @@ def create_drift_snapshot(
                 model_version=model_version,
                 reference_version=reference_version,
                 source_type=source_type,
+                window_start=window_start,
+                window_end=window_end,
+                prediction_event_start_id=prediction_event_start_id,
+                prediction_event_end_id=prediction_event_end_id,
                 psi=psi,
                 psi_interpretation=psi_interpretation,
                 ks_statistic=ks_statistic,
@@ -142,6 +150,8 @@ def create_drift_snapshot(
         logger.error("Failed to persist drift snapshot: %s", exc)
         return {
             "period_label": period_label,
+            "model_version": model_version,
+            "reference_version": reference_version,
             "psi": psi,
             "psi_interpretation": psi_interpretation,
             "ks_statistic": ks_statistic,
@@ -149,6 +159,10 @@ def create_drift_snapshot(
             "ks_drift_detected": ks_drift_detected,
             "n_samples": n_samples,
             "source_type": source_type,
+            "window_start": window_start,
+            "window_end": window_end,
+            "prediction_event_start_id": prediction_event_start_id,
+            "prediction_event_end_id": prediction_event_end_id,
         }
 
 
@@ -207,6 +221,11 @@ def compute_live_drift_from_events(
             report = check_drift_report(ref_df, cur_df, columns=["score"])
             row = report.iloc[0]
 
+            window_end = events[0].timestamp if events else None
+            window_start = events[-1].timestamp if events else None
+            event_end_id = events[0].id if events else None
+            event_start_id = events[-1].id if events else None
+
             snapshot = create_drift_snapshot(
                 period_label=f"Live Window (N={n_events})",
                 model_version=model_version,
@@ -218,11 +237,21 @@ def compute_live_drift_from_events(
                 ks_drift_detected=bool(row["ks_drift_detected"]),
                 n_samples=n_events,
                 source_type="live_telemetry",
+                window_start=window_start,
+                window_end=window_end,
+                prediction_event_start_id=event_start_id,
+                prediction_event_end_id=event_end_id,
             )
 
             return {
                 "status": "ok",
                 "n_observations": n_events,
+                "model_version": model_version,
+                "reference_version": reference_version,
+                "window_start": window_start,
+                "window_end": window_end,
+                "prediction_event_start_id": event_start_id,
+                "prediction_event_end_id": event_end_id,
                 "psi": float(row["psi"]),
                 "psi_interpretation": str(row["psi_interpretation"]),
                 "ks_statistic": float(row["ks_statistic"]),
@@ -231,6 +260,7 @@ def compute_live_drift_from_events(
                 "source_type": "live_telemetry",
                 "snapshot": snapshot,
             }
+
     except Exception as exc:
         logger.error("Failed to compute drift from events: %s", exc)
         return {

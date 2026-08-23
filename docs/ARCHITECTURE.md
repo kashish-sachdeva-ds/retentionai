@@ -50,10 +50,10 @@ flowchart TD
 flowchart LR
     Kaggle[("Kaggle Telco Snapshot<br/>7,043 rows")] --> Split["4-Way Disjoint Split"]
     
-    Split --> Train["Train Set<br/>(60%)"]
-    Split --> Calib["Calibration Set<br/>(20%)"]
-    Split --> Conf["Conformal Set<br/>(10%)"]
-    Split --> Holdout["Holdout Set<br/>(10%)"]
+    Split --> Train["Train Set<br/>5,634 rows (80.0%)"]
+    Split --> Calib["Calibration Set<br/>470 rows (6.7%)"]
+    Split --> Conf["Conformal Set<br/>470 rows (6.7%)"]
+    Split --> Holdout["Holdout Set<br/>469 rows (6.6%)"]
 
     Train --> FeatEng["Train-Only Encoding & IV/VIF Scaling"]
     FeatEng --> XGB["Fit XGBoost Champion"]
@@ -67,7 +67,28 @@ flowchart LR
 
 ---
 
-## 3. API Endpoints & Access Control
+## 3. Database Persistence & Scaling Strategy
+
+```mermaid
+flowchart TD
+    API["FastAPI Serving Core"]
+    
+    subgraph Storage ["Durable Persistence Layer (SQLAlchemy ORM)"]
+        direction TB
+        SQLite["Portfolio / Single-Instance:<br/>SQLite at data/retentionai.db"]
+        Postgres["Multi-Replica Production:<br/>PostgreSQL via DATABASE_URL"]
+    end
+    
+    API -->|Direct Transactions| Storage
+    Storage --> Audit["AuditRecordModel (Decisions)"]
+    Storage --> Traces["DecisionTraceModel (Pipeline Timings)"]
+    Storage --> Events["PredictionEventModel (Live Stream)"]
+    Storage --> DriftSnap["DriftSnapshotModel (Lineage & PSI/KS)"]
+```
+
+---
+
+## 4. API Endpoints & Access Control
 
 | Endpoint | Method | Access Level | Description |
 |---|---|---|---|
@@ -77,14 +98,18 @@ flowchart LR
 | `/counterfactual/{request_id}` | `GET` | Public | Asynchronous counterfactual search results for minimum feasible intervention levers. |
 | `/bandit/posteriors` | `GET` | Public | Read-only inspection of current Beta distributions across offer arms. |
 | `/feedback/{arm_name}` | `POST` | Admin Key Protected | Idempotent retention outcome recording to update Thompson Sampling posteriors. |
-| `/monitoring/drift` | `GET` | Admin Key Protected | PSI & Kolmogorov-Smirnov output score distribution drift checks. |
+| `/monitoring/drift` | `GET` | Public / Admin | PSI & Kolmogorov-Smirnov output score distribution drift checks on live telemetry. |
+| `/monitoring/drift/history` | `GET` | Public | Durable historical time-series of point-in-time drift snapshots with data lineage. |
+| `/audit/records` | `GET` | Public | Immutable audit log of individual customer assessments and human reviews. |
 
 ---
 
-## 4. Key Design Decisions (ADR Reference)
+## 5. Key Design Decisions (ADR Reference)
 
 - **ADR-002 (Success Metric):** Evaluated primarily on PR-AUC (not accuracy or ROC-AUC) given class imbalance (~26.5% churn). Cost-sensitive decision threshold derived as $70 / $840 &approx; 8.33%.
 - **ADR-007 (Leakage Prevention):** Encoders and scalers are strictly fit on the training split only.
 - **ADR-010 & ADR-017 (Disjoint Conformal Calibration):** Separate validation splits are used for isotonic regression vs. Mondrian conformal quantile threshold calculation to preserve finite-sample coverage exchangeability.
 - **ADR-012 (Thompson Sampling):** Multi-armed bandit routes offers across `discount`, `technician`, and `control`. Outcomes are stored with SHA-256 idempotency in Redis.
 - **ADR-014 (Production Serving):** Pre-trained model artifacts are verified at startup and served via FastAPI.
+- **ADR-018 (Durable Storage & Data Lineage):** Dual database strategy (SQLite for single-instance, PostgreSQL for multi-replica) with explicit event ID and window lineage for all drift snapshots.
+
