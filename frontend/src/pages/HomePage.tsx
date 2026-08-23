@@ -153,7 +153,7 @@ export function HomePage(_props: HomePageProps) {
             <p className="mt-4 text-base leading-7 text-slate-600">
               When attention and retention budgets are scarce, raw churn probabilities aren't enough.
               RetentionAI translates calibrated risk, Mondrian conformal uncertainty, and economic value
-              into an optimal operational triage list.
+              into a rank-ordered economic triage list.
             </p>
 
             <div className="mt-6 flex flex-wrap items-center gap-3">

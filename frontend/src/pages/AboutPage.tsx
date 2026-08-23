@@ -2,7 +2,7 @@ import { BookOpen, Database, GitBranch, ShieldCheck } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 const ADR_LIST = [
-  ['ADR-000', 'Staged build process & restart'], ['ADR-001', 'Business problem framing'], ['ADR-002', 'Success metric & prioritisation'], ['ADR-003', 'Reproducible data extraction'], ['ADR-004', 'Data understanding & validation'], ['ADR-005', 'Hypothesis-driven EDA'], ['ADR-006', 'Feature engineering'], ['ADR-007', 'Leakage-safe pipeline'], ['ADR-008', 'Baseline logistic regression'], ['ADR-009', 'Champion XGBoost selection'], ['ADR-010', 'Calibration & conformal prediction'], ['ADR-011', 'Survival analysis'], ['ADR-012', 'Offline Thompson-sampling replay'], ['ADR-013', 'Counterfactual scenario search'], ['ADR-014', 'FastAPI serving architecture'], ['ADR-015', 'Docker, CI/CD & tests'], ['ADR-016', 'SHAP investigation'], ['ADR-017', 'Hardening & split audit'],
+  ['ADR-000', 'Staged build process & restart'], ['ADR-001', 'Business problem framing'], ['ADR-002', 'Success metric & prioritisation'], ['ADR-003', 'Reproducible data extraction'], ['ADR-004', 'Data understanding & validation'], ['ADR-005', 'Hypothesis-driven EDA'], ['ADR-006', 'Feature engineering'], ['ADR-007', 'Leakage-safe pipeline'], ['ADR-008', 'Baseline logistic regression'], ['ADR-009', 'Champion XGBoost selection'], ['ADR-010', 'Calibration & conformal prediction'], ['ADR-011', 'Survival analysis'], ['ADR-012', 'Offline Thompson-sampling replay'], ['ADR-013', 'Counterfactual scenario search'], ['ADR-014', 'FastAPI serving architecture'], ['ADR-015', 'Docker, CI/CD & tests'], ['ADR-016', 'SHAP investigation'], ['ADR-017', 'Hardening & split audit'], ['ADR-018', 'Durable storage & lineage scaling'],
 ];
 
 export function AboutPage() {

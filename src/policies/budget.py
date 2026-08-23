@@ -2,7 +2,7 @@
 Budget-constrained allocation for the retention priority queue.
 
 Given a set of scored customers and a finite call budget, this module
-selects the optimal subset to contact under three objective functions:
+selects the rank-ordered prioritized subset to contact under three objective functions:
 
   risk_first   — maximise coverage of highest-risk customers
   value_aware  — maximise total customer value under risk
