@@ -11,11 +11,33 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { getBanditPosteriors, getDrift, getDriftHistory } from '../api';
-import type { BanditPosteriorResponse, DriftHistoryResponse, DriftResponse } from '../types';
+import type { BanditPosteriorResponse, DriftHistoryResponse, DriftResponse, DriftSnapshot } from '../types';
+
+function formatWindow(start?: string, end?: string): string {
+  if (!start || !end) return 'Active Live Window';
+  try {
+    const s = new Date(start);
+    const e = new Date(end);
+    const sDate = s.toISOString().slice(0, 10);
+    const sTime = s.toISOString().slice(11, 16);
+    const eTime = e.toISOString().slice(11, 16);
+    return `${sDate} ${sTime} → ${eTime} UTC`;
+  } catch {
+    return `${start.slice(0, 16)} → ${end.slice(0, 16)}`;
+  }
+}
+
+function formatEventRange(startId?: number, endId?: number, count?: number): string {
+  if (startId !== undefined && endId !== undefined && startId !== null && endId !== null) {
+    return `#${startId.toLocaleString()} → #${endId.toLocaleString()}`;
+  }
+  return count ? `Events (N=${count.toLocaleString()})` : '—';
+}
 
 export function MonitoringPage() {
   const [drift, setDrift] = useState<DriftResponse | null>(null);
   const [history, setHistory] = useState<DriftHistoryResponse | null>(null);
+  const [selectedSnapshot, setSelectedSnapshot] = useState<DriftSnapshot | null>(null);
   const [bandit, setBandit] = useState<BanditPosteriorResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [previewBenchmark, setPreviewBenchmark] = useState(false);
@@ -28,8 +50,20 @@ export function MonitoringPage() {
         getDriftHistory(),
         getBanditPosteriors(),
       ]);
-      if (driftRes.status === 'fulfilled') setDrift(driftRes.value);
-      if (historyRes.status === 'fulfilled') setHistory(historyRes.value);
+      if (driftRes.status === 'fulfilled') {
+        const d = driftRes.value;
+        setDrift(d);
+        if (d.snapshot && !selectedSnapshot) {
+          setSelectedSnapshot(d.snapshot);
+        }
+      }
+      if (historyRes.status === 'fulfilled') {
+        const h = historyRes.value;
+        setHistory(h);
+        if (h.snapshots && h.snapshots.length > 0) {
+          setSelectedSnapshot(h.snapshots[0]);
+        }
+      }
       if (banditRes.status === 'fulfilled') setBandit(banditRes.value);
     } finally {
       setLoading(false);
@@ -45,27 +79,36 @@ export function MonitoringPage() {
   const isBenchmark = drift?.source_type === 'benchmark_holdout' || drift?.status === 'benchmark_preview';
 
   // Overall Health Status computation
-  const psiVal = drift?.psi ?? 0;
-  const isKsShift = drift?.ks_drift_detected ?? false;
+  const activePsi = selectedSnapshot?.psi ?? drift?.psi ?? 0;
+  const activeKsShift = selectedSnapshot?.ks_drift_detected ?? drift?.ks_drift_detected ?? false;
   let telemetryStatus = 'Healthy';
   let telemetryStatusColor = 'emerald';
 
   if (isColdStart) {
     telemetryStatus = 'Cold Start';
     telemetryStatusColor = 'amber';
-  } else if (psiVal >= 0.25 || isKsShift) {
+  } else if (activePsi >= 0.25 || activeKsShift) {
     telemetryStatus = 'Investigate';
     telemetryStatusColor = 'rose';
-  } else if (psiVal >= 0.10) {
+  } else if (activePsi >= 0.10) {
     telemetryStatus = 'Watch';
     telemetryStatusColor = 'amber';
   }
 
-  const modelVer = drift?.model_version || drift?.snapshot?.model_version || 'xgb-v12b';
-  const refVer = drift?.reference_version || drift?.snapshot?.reference_version || 'Calibration Holdout (470 rows)';
-  const startId = drift?.prediction_event_start_id || drift?.snapshot?.prediction_event_start_id;
-  const endId = drift?.prediction_event_end_id || drift?.snapshot?.prediction_event_end_id;
-  const lineageLabel = startId && endId ? `Events #${startId} → #${endId}` : `${liveEventsCount} Events`;
+  // Active snapshot lineage variables
+  const snapSource = selectedSnapshot?.source_type || drift?.source_type || 'live_telemetry';
+  const snapModel = selectedSnapshot?.model_version || drift?.model_version || 'xgb-v12b';
+  const snapRef = selectedSnapshot?.reference_version || drift?.reference_version || 'calibration-v1';
+  const snapWindow = formatWindow(
+    selectedSnapshot?.window_start || drift?.window_start,
+    selectedSnapshot?.window_end || drift?.window_end
+  );
+  const snapEventRange = formatEventRange(
+    selectedSnapshot?.prediction_event_start_id || drift?.prediction_event_start_id,
+    selectedSnapshot?.prediction_event_end_id || drift?.prediction_event_end_id,
+    selectedSnapshot?.n_samples || liveEventsCount
+  );
+  const snapSampleSize = selectedSnapshot?.n_samples || liveEventsCount;
 
   return (
     <main className="mx-auto w-full max-w-7xl space-y-8 p-4 sm:p-8">
@@ -107,7 +150,7 @@ export function MonitoringPage() {
         </div>
       </div>
 
-      {/* Prominent Live Telemetry Grid */}
+      {/* Prominent Live Telemetry Hero Grid */}
       <section className="rounded-3xl border border-slate-200 bg-linear-to-b from-white to-slate-50/50 p-6 shadow-xs sm:p-8 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-5">
           <div className="flex items-center gap-3">
@@ -139,7 +182,7 @@ export function MonitoringPage() {
             </div>
 
             <span className="rounded-xl border border-slate-200 bg-white px-3 py-1 text-xs font-mono font-semibold text-slate-600">
-              Model: <span className="font-bold text-slate-900">{modelVer}</span>
+              Model: <span className="font-bold text-slate-900">{snapModel}</span>
             </span>
           </div>
         </div>
@@ -181,71 +224,61 @@ export function MonitoringPage() {
           </div>
         )}
 
-        {/* 6 Key Operational Telemetry Indicators */}
+        {/* 6 Prominent Lineage Provenance Cards */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-          <div className="rounded-2xl border border-slate-200/70 bg-white p-4 space-y-1">
-            <div className="text-[11px] font-medium text-slate-500">Observations</div>
+          <div className="rounded-2xl border border-slate-200/80 bg-white p-4 space-y-1 shadow-2xs">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Source</div>
+            <div className="font-bold text-sm text-slate-900 capitalize">
+              {snapSource.replace(/_/g, ' ')}
+            </div>
+            <div className="text-[10px] text-slate-400">Telemetry Stream</div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200/80 bg-white p-4 space-y-1 shadow-2xs">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Model</div>
+            <div className="font-mono font-extrabold text-sm text-slate-900">
+              {snapModel}
+            </div>
+            <div className="text-[10px] text-slate-400">Active Champion</div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200/80 bg-white p-4 space-y-1 shadow-2xs">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Reference</div>
+            <div className="font-mono font-bold text-sm text-slate-900 truncate">
+              {snapRef}
+            </div>
+            <div className="text-[10px] text-slate-400">Frozen Baseline</div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200/80 bg-white p-4 space-y-1 shadow-2xs">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Observation Window</div>
+            <div className="font-mono text-xs font-bold text-slate-800 truncate" title={snapWindow}>
+              {snapWindow}
+            </div>
+            <div className="text-[10px] text-slate-400">Time Range</div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200/80 bg-white p-4 space-y-1 shadow-2xs">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Event Range</div>
+            <div className="font-mono text-xs font-black text-indigo-700 truncate" title={snapEventRange}>
+              {snapEventRange}
+            </div>
+            <div className="text-[10px] text-slate-400">Durable Event IDs</div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200/80 bg-white p-4 space-y-1 shadow-2xs">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Sample Size</div>
             <div className="font-mono text-2xl font-black text-slate-900">
-              {liveEventsCount.toLocaleString()}
+              {snapSampleSize.toLocaleString()}
             </div>
-            <div className="text-[10px] text-slate-400">Durable Events in DB</div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200/70 bg-white p-4 space-y-1">
-            <div className="text-[11px] font-medium text-slate-500">Observation Window</div>
-            <div className="font-semibold text-sm text-slate-900 truncate">
-              {isColdStart ? 'Active Stream' : 'Live Window'}
-            </div>
-            <div className="text-[10px] font-mono text-slate-400 truncate">
-              {drift?.window_end ? new Date(drift.window_end).toLocaleTimeString() : 'Current Session'}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200/70 bg-white p-4 space-y-1">
-            <div className="text-[11px] font-medium text-slate-500">PSI (Quantile Drift)</div>
-            <div className="font-mono text-2xl font-black text-slate-900">
-              {drift?.psi !== undefined ? drift.psi.toFixed(4) : '—'}
-            </div>
-            <div className="text-[10px] font-medium">
-              <span className={psiVal < 0.10 ? 'text-emerald-600' : psiVal < 0.25 ? 'text-amber-600' : 'text-rose-600'}>
-                {isColdStart ? 'Threshold < 0.10' : drift?.psi_interpretation || 'Stable'}
-              </span>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200/70 bg-white p-4 space-y-1">
-            <div className="text-[11px] font-medium text-slate-500">KS Test (p-value)</div>
-            <div className="font-mono text-2xl font-black text-slate-900">
-              {drift?.ks_p_value !== undefined ? (drift.ks_p_value < 0.001 ? '< 0.001' : drift.ks_p_value.toFixed(3)) : '—'}
-            </div>
-            <div className="text-[10px] font-medium">
-              <span className={!isKsShift ? 'text-emerald-600' : 'text-rose-600 font-bold'}>
-                {isColdStart ? 'Alpha = 0.05' : isKsShift ? 'Shift Detected' : 'No Shift (p ≥ 0.05)'}
-              </span>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200/70 bg-white p-4 space-y-1">
-            <div className="text-[11px] font-medium text-slate-500">Reference Baseline</div>
-            <div className="font-semibold text-sm text-slate-900 truncate">
-              {refVer}
-            </div>
-            <div className="text-[10px] text-slate-400">Frozen Validation Split</div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200/70 bg-white p-4 space-y-1">
-            <div className="text-[11px] font-medium text-slate-500">Data Lineage</div>
-            <div className="font-mono text-xs font-bold text-indigo-700 truncate">
-              {lineageLabel}
-            </div>
-            <div className="text-[10px] text-slate-400">Durable SQLite Provenance</div>
+            <div className="text-[10px] text-slate-400">Observations</div>
           </div>
         </div>
       </section>
 
-      {/* Statistical Methodology Deep-Dive */}
+      {/* Statistical Methodology Deep-Dive (PSI & KS) */}
       <section className="grid gap-6 md:grid-cols-2">
-        {/* PSI Breakdown */}
+        {/* PSI Card */}
         <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div className="flex items-center gap-2">
@@ -260,18 +293,24 @@ export function MonitoringPage() {
           <div>
             <div className="flex items-baseline gap-3">
               <span className="font-mono text-3xl font-extrabold text-slate-900">
-                {drift?.psi !== undefined ? drift.psi.toFixed(4) : isColdStart ? '—' : '0.0382'}
+                {selectedSnapshot?.psi !== undefined
+                  ? selectedSnapshot.psi.toFixed(4)
+                  : drift?.psi !== undefined
+                  ? drift.psi.toFixed(4)
+                  : isColdStart
+                  ? '—'
+                  : '0.0382'}
               </span>
               <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
                 isColdStart
                   ? 'bg-slate-100 text-slate-600'
-                  : (drift?.psi ?? 0) < 0.10
+                  : activePsi < 0.10
                   ? 'bg-emerald-100 text-emerald-800'
-                  : (drift?.psi ?? 0) < 0.25
+                  : activePsi < 0.25
                   ? 'bg-amber-100 text-amber-800'
                   : 'bg-rose-100 text-rose-800'
               }`}>
-                {isColdStart ? 'Awaiting 100 Obs' : drift?.psi_interpretation || 'Stable'}
+                {isColdStart ? 'Awaiting 100 Obs' : selectedSnapshot?.psi_interpretation || drift?.psi_interpretation || 'Stable'}
               </span>
             </div>
             <p className="mt-2 text-xs text-slate-500 leading-5">
@@ -295,7 +334,7 @@ export function MonitoringPage() {
           </div>
         </div>
 
-        {/* KS Test Breakdown */}
+        {/* KS Test Card */}
         <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div className="flex items-center gap-2">
@@ -310,16 +349,22 @@ export function MonitoringPage() {
           <div>
             <div className="flex items-baseline gap-3">
               <span className="font-mono text-3xl font-extrabold text-slate-900">
-                {drift?.ks_p_value !== undefined ? `p = ${drift.ks_p_value < 0.001 ? '< 0.001' : drift.ks_p_value.toFixed(3)}` : isColdStart ? '—' : 'p = 0.412'}
+                {selectedSnapshot?.ks_p_value !== undefined
+                  ? `p = ${selectedSnapshot.ks_p_value < 0.001 ? '< 0.001' : selectedSnapshot.ks_p_value.toFixed(3)}`
+                  : drift?.ks_p_value !== undefined
+                  ? `p = ${drift.ks_p_value < 0.001 ? '< 0.001' : drift.ks_p_value.toFixed(3)}`
+                  : isColdStart
+                  ? '—'
+                  : 'p = 0.412'}
               </span>
               <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
                 isColdStart
                   ? 'bg-slate-100 text-slate-600'
-                  : drift?.ks_drift_detected
+                  : activeKsShift
                   ? 'bg-rose-100 text-rose-800'
                   : 'bg-emerald-100 text-emerald-800'
               }`}>
-                {isColdStart ? 'Awaiting 100 Obs' : drift?.ks_drift_detected ? 'Significant Shift (p < 0.05)' : 'No Significant Shift'}
+                {isColdStart ? 'Awaiting 100 Obs' : activeKsShift ? 'Significant Shift (p < 0.05)' : 'No Significant Shift'}
               </span>
             </div>
             <p className="mt-2 text-xs text-slate-500 leading-5">
@@ -336,7 +381,7 @@ export function MonitoringPage() {
         </div>
       </section>
 
-      {/* Historical Drift Snapshots Table with Data Lineage */}
+      {/* Historical Drift Snapshots Table with Interactive Selection */}
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xs sm:p-8 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
           <div>
@@ -345,7 +390,7 @@ export function MonitoringPage() {
               <h3 className="font-bold text-slate-900">Historical Drift Timeline &amp; Event Lineage</h3>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Durable point-in-time drift calculations linked directly to the bounded range of live prediction events evaluated.
+              Click any historical snapshot to inspect its exact time window, bounded prediction event IDs, and statistical metrics.
             </p>
           </div>
 
@@ -368,45 +413,54 @@ export function MonitoringPage() {
                 <tr className="border-b border-slate-200 text-slate-500 font-medium">
                   <th className="pb-3 px-3">Snapshot Timestamp</th>
                   <th className="pb-3 px-3">Period Label</th>
-                  <th className="pb-3 px-3">Event Lineage</th>
+                  <th className="pb-3 px-3">Event Range</th>
+                  <th className="pb-3 px-3">Observation Window</th>
                   <th className="pb-3 px-3">Samples</th>
                   <th className="pb-3 px-3">PSI Metric</th>
                   <th className="pb-3 px-3">KS p-value</th>
-                  <th className="pb-3 px-3">Model / Ref</th>
-                  <th className="pb-3 px-3">Source Type</th>
+                  <th className="pb-3 px-3">Source</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-mono">
-                {history.snapshots.map((s, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/80 transition">
-                    <td className="py-3 px-3 text-slate-700">{s.timestamp.slice(0, 19).replace('T', ' ')}</td>
-                    <td className="py-3 px-3 font-semibold text-slate-900 font-sans">{s.period_label}</td>
-                    <td className="py-3 px-3">
-                      <span className="inline-flex items-center gap-1 rounded bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700 border border-indigo-100">
-                        <GitBranch className="h-3 w-3" />
-                        {s.prediction_event_start_id && s.prediction_event_end_id
-                          ? `#${s.prediction_event_start_id} → #${s.prediction_event_end_id}`
-                          : `N=${s.n_samples}`}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 text-slate-600 font-bold">{s.n_samples}</td>
-                    <td className="py-3 px-3 font-bold text-slate-900">
-                      <span>{s.psi.toFixed(4)} </span>
-                      <span className={`rounded px-1.5 py-0.2 text-[9px] font-sans font-bold ${
-                        s.psi < 0.10 ? 'bg-emerald-100 text-emerald-800' : s.psi < 0.25 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
-                      }`}>
-                        {s.psi_interpretation}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 text-slate-700">p = {s.ks_p_value < 0.001 ? '< 0.001' : s.ks_p_value.toFixed(3)}</td>
-                    <td className="py-3 px-3 text-[10px] text-slate-500 font-sans">{s.model_version || 'xgb-v12b'}</td>
-                    <td className="py-3 px-3">
-                      <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-sans text-slate-600 font-bold">
-                        {s.source_type}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {history.snapshots.map((s, idx) => {
+                  const isSelected = selectedSnapshot?.id === s.id || (selectedSnapshot?.timestamp === s.timestamp && !s.id);
+                  return (
+                    <tr
+                      key={idx}
+                      onClick={() => setSelectedSnapshot(s)}
+                      className={`cursor-pointer transition ${
+                        isSelected ? 'bg-indigo-50/80 font-bold' : 'hover:bg-slate-50/80'
+                      }`}
+                    >
+                      <td className="py-3 px-3 text-slate-700">{s.timestamp.slice(0, 19).replace('T', ' ')}</td>
+                      <td className="py-3 px-3 font-semibold text-slate-900 font-sans">{s.period_label}</td>
+                      <td className="py-3 px-3">
+                        <span className="inline-flex items-center gap-1 rounded bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700 border border-indigo-100">
+                          <GitBranch className="h-3 w-3" />
+                          {formatEventRange(s.prediction_event_start_id, s.prediction_event_end_id, s.n_samples)}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-[11px] text-slate-600 font-sans truncate max-w-[180px]">
+                        {formatWindow(s.window_start, s.window_end)}
+                      </td>
+                      <td className="py-3 px-3 text-slate-600 font-bold">{s.n_samples}</td>
+                      <td className="py-3 px-3 font-bold text-slate-900">
+                        <span>{s.psi.toFixed(4)} </span>
+                        <span className={`rounded px-1.5 py-0.2 text-[9px] font-sans font-bold ${
+                          s.psi < 0.10 ? 'bg-emerald-100 text-emerald-800' : s.psi < 0.25 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
+                        }`}>
+                          {s.psi_interpretation}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-slate-700">p = {s.ks_p_value < 0.001 ? '< 0.001' : s.ks_p_value.toFixed(3)}</td>
+                      <td className="py-3 px-3">
+                        <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-sans text-slate-600 font-bold capitalize">
+                          {(s.source_type || 'live_telemetry').replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
