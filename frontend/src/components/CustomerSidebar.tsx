@@ -37,9 +37,9 @@ export const PRESET_PROFILES: CustomerProfile[] = [
     name: 'ACCT-4410 • Borderline Mid-Tenure Account',
     category: 'preset',
     riskTier: 'moderate',
-    riskScore: 0.42,
+    riskScore: 0.23,
     contract: 'Month-to-month',
-    tenure: 14,
+    tenure: 18,
     data: PRESETS.borderline.data,
   },
   {
@@ -47,9 +47,9 @@ export const PRESET_PROFILES: CustomerProfile[] = [
     name: 'ACCT-1205 • Loyal Multi-Service Account',
     category: 'preset',
     riskTier: 'low',
-    riskScore: 0.03,
+    riskScore: 0.01,
     contract: 'Two year',
-    tenure: 58,
+    tenure: 68,
     data: PRESETS.loyal.data,
   },
 ];
