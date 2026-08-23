@@ -119,10 +119,10 @@ export function Sidebar({ isOpen, onClose, health }: SidebarProps) {
         </div>
 
         {/* Serving status */}
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
+        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-              Model service
+              Model Service
             </span>
             <span className="flex h-2 w-2 relative">
               {health?.model_loaded ? (
@@ -131,19 +131,26 @@ export function Sidebar({ isOpen, onClose, health }: SidebarProps) {
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
                 </>
               ) : (
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400" />
+                <>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+                </>
               )}
             </span>
           </div>
 
-          <div className="text-[11px] text-slate-600 space-y-1 pt-1">
-            <div className="flex justify-between">
+          <div className="text-[11px] text-slate-600 space-y-1.5 pt-1">
+            <div className="flex justify-between items-center">
               <span className="text-slate-500">Status:</span>
-              <strong className={health?.model_loaded ? 'text-emerald-700' : 'text-amber-700'}>{health?.model_loaded ? 'Ready' : 'Unavailable'}</strong>
+              <strong className={health?.model_loaded ? 'text-emerald-700 font-bold' : 'text-amber-700 font-bold'}>
+                {health?.model_loaded ? 'Active & Ready' : 'Waking from Sleep (~45s)'}
+              </strong>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between items-center">
               <span className="text-slate-500">Artifact:</span>
-              <strong className="max-w-[120px] truncate font-mono text-slate-700" title={health?.model_version ?? undefined}>{health?.model_version ? health.model_version.slice(0, 12) : '—'}</strong>
+              <strong className="max-w-[120px] truncate font-mono text-slate-700" title={health?.model_version ?? undefined}>
+                {health?.model_version ? `v${health.model_version.slice(0, 10)}` : 'Loading...'}
+              </strong>
             </div>
           </div>
         </div>

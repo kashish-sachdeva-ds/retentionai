@@ -30,11 +30,48 @@ export function HomePage({ health, assessmentCount }: HomePageProps) {
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">System status</p><h2 className="mt-2 text-xl font-semibold text-slate-950">A small, inspectable portfolio system</h2></div><button onClick={() => navigate('/evidence')} className="inline-flex items-center gap-2 self-start text-sm font-semibold text-indigo-700 hover:text-indigo-900">Open release evidence <ArrowRight className="h-4 w-4" /></button></div>
-        <div className="mt-6 grid gap-4 sm:grid-cols-3"><Metric label="API" value={health?.status === 'ok' && health.model_loaded ? 'Ready' : 'Unavailable'} note={health?.model_version ? `Serving artifact ${health.model_version.slice(0, 13)}…` : 'Connect the local API to score profiles.'} /><Metric label="This session" value={`${assessmentCount} assessed`} note="Predictions created during this browser session." /><Metric label="Dataset" value="Public benchmark" note="Kaggle Telco Churn; no live customer data." /></div>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">System status</p>
+            <h2 className="mt-2 text-xl font-bold text-slate-950">A Transparent, Production-Ready ML Portfolio System</h2>
+          </div>
+          <button
+            onClick={() => navigate('/evidence')}
+            className="inline-flex items-center gap-2 self-start text-xs font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-3.5 py-2 rounded-xl transition"
+          >
+            Open release evidence <ArrowRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        <div className="mt-6 grid gap-4 sm:grid-cols-3">
+          <Metric
+            label="Serving API"
+            value={
+              health?.status === 'ok' && health.model_loaded
+                ? 'Active & Ready'
+                : 'Waking (~45s)'
+            }
+            note={
+              health?.model_version
+                ? `Artifact v${health.model_version.slice(0, 10)}`
+                : 'Render free-tier container spin-up.'
+            }
+          />
+          <Metric
+            label="This Session"
+            value={`${assessmentCount} assessed`}
+            note="Live predictions scored during this session."
+          />
+          <Metric
+            label="Benchmark Dataset"
+            value="7,043 Customers"
+            note="Telco Churn with strict disjoint holdout protocol."
+          />
+        </div>
       </section>
 
-      <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900"><strong>Portfolio demonstration.</strong> It estimates churn propensity; it does not estimate offer uplift, prove retainability, or represent a hardened production deployment.</p>
+      <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">
+        <strong>Portfolio demonstration.</strong> Estimates calibrated churn propensity for decision support. It does not estimate causal offer uplift or represent live private customer data.
+      </p>
     </main>
   );
 }

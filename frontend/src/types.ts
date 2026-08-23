@@ -69,16 +69,19 @@ export interface EvaluationSlice {
   n: number;
   pr_auc: number;
   brier_score: number;
-  empirical_coverage: number;
+  empirical_coverage?: number;
+  churn_rate?: number;
 }
 
 export interface ModelCardEvaluation {
   ranking?: {
     pr_auc?: number;
+    pr_auc_95pct_bootstrap_ci?: [number, number] | number[];
     pr_auc_ci_lower?: number;
     pr_auc_ci_upper?: number;
     precision_at_k?: number;
     recall_at_k?: number;
+    decision_k?: number;
     k?: number;
   };
   calibration?: {
@@ -87,8 +90,15 @@ export interface ModelCardEvaluation {
   };
   conformal?: {
     target_coverage?: number;
-    class_conditional_coverage?: Record<string, number>;
+    class_conditional_coverage?: Record<string, { n_examples: number; empirical_coverage: number } | number>;
+    average_prediction_set_size?: number;
     average_set_size?: number;
+  };
+  split_counts?: {
+    train?: number;
+    calibration?: number;
+    conformal?: number;
+    holdout?: number;
   };
   splits?: {
     train?: number;
@@ -96,7 +106,18 @@ export interface ModelCardEvaluation {
     conformal?: number;
     holdout?: number;
   };
-  slices?: EvaluationSlice[];
+  slices?: Record<string, Array<{
+    value: string;
+    n_examples: number;
+    churn_rate: number;
+    pr_auc: number;
+    brier_score: number;
+  }>> | EvaluationSlice[];
+  decision_policy?: {
+    churn_probability_threshold?: number;
+    note?: string;
+  };
+  limitations?: string[];
 }
 
 export interface ModelCardResponse {
@@ -110,3 +131,4 @@ export interface ScoredAssessment {
   createdAt: Date;
   feedback?: { retained: boolean; recordedAt: Date };
 }
+
