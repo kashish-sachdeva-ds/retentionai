@@ -243,10 +243,11 @@ export function PriorityQueuePage() {
                       {/* Action & Expand */}
                       <td className="py-3.5 pl-2 pr-4 sm:pr-6 text-right">
                         <button
+                          type="button"
                           onClick={() => setExpandedCustomerId(isExpanded ? null : cust.customer_id)}
                           aria-expanded={isExpanded}
                           aria-controls={`priority-rationale-${cust.customer_id}`}
-                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50"
+                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer shadow-2xs transition"
                         >
                           <span>{isExpanded ? 'Hide' : 'Why?'}</span>
                           <ChevronDown className={`h-3 w-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
@@ -265,10 +266,11 @@ export function PriorityQueuePage() {
                                 </p>
                               </div>
                               <button
+                                type="button"
                                 onClick={() => navigate(`/customer/${encodeURIComponent(cust.customer_id)}`)}
-                                className="shrink-0 text-left text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline"
+                                className="shrink-0 text-left text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer transition"
                               >
-                                Open customer dossier
+                                Open customer dossier →
                               </button>
                             </div>
 

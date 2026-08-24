@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import {
   ArrowRight,
+  Check,
   CheckCircle2,
   Download,
   FileCheck2,
+  LoaderCircle,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -22,6 +24,8 @@ export function GovernancePage() {
   const [searchAudit, setSearchAudit] = useState('');
   const [loading, setLoading] = useState(true);
   const [reviewUpdating, setReviewUpdating] = useState(false);
+  const [updatingAction, setUpdatingAction] = useState<string | null>(null);
+  const [statusFeedback, setStatusFeedback] = useState<string | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -66,15 +70,21 @@ export function GovernancePage() {
 
   const handleReviewStatusChange = async (decisionId: string, newStatus: 'approved' | 'rejected' | 'escalated') => {
     setReviewUpdating(true);
+    setUpdatingAction(newStatus);
+    setStatusFeedback(null);
     try {
       const updated = await updateAuditReview(decisionId, newStatus, 'ops_lead_reviewer');
       setSelectedAudit((prev) => (prev?.decision_id === decisionId ? updated : prev));
       setModalAudit((prev) => (prev?.decision_id === decisionId ? updated : prev));
       setAuditRecords((prev) => prev.map((r) => (r.decision_id === decisionId ? updated : r)));
+      setStatusFeedback(`Audit record ${decisionId} updated to ${newStatus.toUpperCase()} by Ops Lead Reviewer`);
+      setTimeout(() => setStatusFeedback(null), 4000);
     } catch (err) {
       console.error('Failed to update review status:', err);
+      setStatusFeedback(`Could not update status: ${err instanceof Error ? err.message : 'Server error'}`);
     } finally {
       setReviewUpdating(false);
+      setUpdatingAction(null);
     }
   };
 
@@ -277,29 +287,68 @@ export function GovernancePage() {
                       </span>
                     </div>
 
-                    <div className="flex gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                       <button
+                        type="button"
                         onClick={() => void handleReviewStatusChange(selectedAudit.decision_id, 'approved')}
-                        disabled={reviewUpdating || selectedAudit.human_review_status === 'approved'}
-                        className="flex-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 transition"
+                        disabled={reviewUpdating}
+                        className={`inline-flex items-center justify-center gap-1 rounded-xl px-2.5 py-2 text-xs font-bold transition shadow-2xs cursor-pointer ${
+                          selectedAudit.human_review_status === 'approved'
+                            ? 'bg-emerald-600 text-white ring-2 ring-emerald-500/30'
+                            : 'border border-emerald-200 bg-emerald-50/80 text-emerald-700 hover:bg-emerald-100'
+                        }`}
                       >
-                        Approve Offer
+                        {updatingAction === 'approved' ? (
+                          <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                        ) : selectedAudit.human_review_status === 'approved' ? (
+                          <Check className="h-3.5 w-3.5" />
+                        ) : null}
+                        <span>{selectedAudit.human_review_status === 'approved' ? 'Approved' : 'Approve'}</span>
                       </button>
+
                       <button
+                        type="button"
                         onClick={() => void handleReviewStatusChange(selectedAudit.decision_id, 'rejected')}
-                        disabled={reviewUpdating || selectedAudit.human_review_status === 'rejected'}
-                        className="flex-1 rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50 transition"
+                        disabled={reviewUpdating}
+                        className={`inline-flex items-center justify-center gap-1 rounded-xl px-2.5 py-2 text-xs font-bold transition shadow-2xs cursor-pointer ${
+                          selectedAudit.human_review_status === 'rejected'
+                            ? 'bg-rose-600 text-white ring-2 ring-rose-500/30'
+                            : 'border border-rose-200 bg-rose-50/80 text-rose-700 hover:bg-rose-100'
+                        }`}
                       >
-                        Override / Reject
+                        {updatingAction === 'rejected' ? (
+                          <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                        ) : selectedAudit.human_review_status === 'rejected' ? (
+                          <Check className="h-3.5 w-3.5" />
+                        ) : null}
+                        <span>{selectedAudit.human_review_status === 'rejected' ? 'Rejected' : 'Override / Reject'}</span>
                       </button>
+
                       <button
+                        type="button"
                         onClick={() => void handleReviewStatusChange(selectedAudit.decision_id, 'escalated')}
-                        disabled={reviewUpdating || selectedAudit.human_review_status === 'escalated'}
-                        className="flex-1 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-100 disabled:opacity-50 transition"
+                        disabled={reviewUpdating}
+                        className={`inline-flex items-center justify-center gap-1 rounded-xl px-2.5 py-2 text-xs font-bold transition shadow-2xs cursor-pointer ${
+                          selectedAudit.human_review_status === 'escalated'
+                            ? 'bg-amber-600 text-white ring-2 ring-amber-500/30'
+                            : 'border border-amber-200 bg-amber-50/80 text-amber-700 hover:bg-amber-100'
+                        }`}
                       >
-                        Escalate
+                        {updatingAction === 'escalated' ? (
+                          <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                        ) : selectedAudit.human_review_status === 'escalated' ? (
+                          <Check className="h-3.5 w-3.5" />
+                        ) : null}
+                        <span>{selectedAudit.human_review_status === 'escalated' ? 'Escalated' : 'Escalate'}</span>
                       </button>
                     </div>
+
+                    {statusFeedback && (
+                      <div className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50/80 px-3 py-2 text-[11px] font-semibold text-indigo-900 animate-fade-in shadow-2xs">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+                        <span>{statusFeedback}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -621,26 +670,55 @@ export function GovernancePage() {
                 <button
                   type="button"
                   onClick={() => void handleReviewStatusChange(modalAudit.decision_id, 'approved')}
-                  disabled={reviewUpdating || modalAudit.human_review_status === 'approved'}
-                  className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 transition"
+                  disabled={reviewUpdating}
+                  className={`inline-flex items-center justify-center gap-1 rounded-xl px-3 py-2 text-xs font-bold transition shadow-2xs cursor-pointer ${
+                    modalAudit.human_review_status === 'approved'
+                      ? 'bg-emerald-600 text-white ring-2 ring-emerald-500/30'
+                      : 'border border-emerald-200 bg-emerald-50/80 text-emerald-700 hover:bg-emerald-100'
+                  }`}
                 >
-                  Approve Offer
+                  {updatingAction === 'approved' ? (
+                    <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                  ) : modalAudit.human_review_status === 'approved' ? (
+                    <Check className="h-3.5 w-3.5" />
+                  ) : null}
+                  <span>{modalAudit.human_review_status === 'approved' ? 'Approved' : 'Approve'}</span>
                 </button>
+
                 <button
                   type="button"
                   onClick={() => void handleReviewStatusChange(modalAudit.decision_id, 'rejected')}
-                  disabled={reviewUpdating || modalAudit.human_review_status === 'rejected'}
-                  className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50 transition"
+                  disabled={reviewUpdating}
+                  className={`inline-flex items-center justify-center gap-1 rounded-xl px-3 py-2 text-xs font-bold transition shadow-2xs cursor-pointer ${
+                    modalAudit.human_review_status === 'rejected'
+                      ? 'bg-rose-600 text-white ring-2 ring-rose-500/30'
+                      : 'border border-rose-200 bg-rose-50/80 text-rose-700 hover:bg-rose-100'
+                  }`}
                 >
-                  Override / Reject
+                  {updatingAction === 'rejected' ? (
+                    <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                  ) : modalAudit.human_review_status === 'rejected' ? (
+                    <Check className="h-3.5 w-3.5" />
+                  ) : null}
+                  <span>{modalAudit.human_review_status === 'rejected' ? 'Rejected' : 'Override / Reject'}</span>
                 </button>
+
                 <button
                   type="button"
                   onClick={() => void handleReviewStatusChange(modalAudit.decision_id, 'escalated')}
-                  disabled={reviewUpdating || modalAudit.human_review_status === 'escalated'}
-                  className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700 hover:bg-amber-100 disabled:opacity-50 transition"
+                  disabled={reviewUpdating}
+                  className={`inline-flex items-center justify-center gap-1 rounded-xl px-3 py-2 text-xs font-bold transition shadow-2xs cursor-pointer ${
+                    modalAudit.human_review_status === 'escalated'
+                      ? 'bg-amber-600 text-white ring-2 ring-amber-500/30'
+                      : 'border border-amber-200 bg-amber-50/80 text-amber-700 hover:bg-amber-100'
+                  }`}
                 >
-                  Escalate
+                  {updatingAction === 'escalated' ? (
+                    <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                  ) : modalAudit.human_review_status === 'escalated' ? (
+                    <Check className="h-3.5 w-3.5" />
+                  ) : null}
+                  <span>{modalAudit.human_review_status === 'escalated' ? 'Escalated' : 'Escalate'}</span>
                 </button>
               </div>
             </div>
