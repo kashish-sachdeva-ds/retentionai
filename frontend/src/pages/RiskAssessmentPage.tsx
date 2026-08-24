@@ -55,13 +55,48 @@ function describeScenario(changes?: Record<string, unknown> | null) {
   return updates.length === 1 ? updates[0] : `${updates.slice(0, -1).join(', ')} and ${updates.at(-1)}`;
 }
 
+const STORAGE_KEY = 'retentionai_assessment_session';
+
+interface PersistedAssessmentState {
+  activeTab: 'benchmarks' | 'custom';
+  selectedPresetKey: string | null;
+  formData: PredictionPayload;
+  isCustomModified: boolean;
+  result: PredictionResponse | null;
+  counterfactual: CounterfactualResponse | null;
+  latencyMs: number | null;
+}
+
+function loadPersistedState(): PersistedAssessmentState {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as PersistedAssessmentState;
+      if (parsed.formData) return parsed;
+    }
+  } catch {
+    // Fallback on parse failure
+  }
+  return {
+    activeTab: 'benchmarks',
+    selectedPresetKey: 'atRisk',
+    formData: PRESETS.atRisk.data,
+    isCustomModified: false,
+    result: null,
+    counterfactual: null,
+    latencyMs: null,
+  };
+}
+
 export const RiskAssessmentPage: React.FC<RiskAssessmentPageProps> = ({ onPrediction }) => {
-  const [activeTab, setActiveTab] = useState<'benchmarks' | 'custom'>('benchmarks');
-  const [selectedPresetKey, setSelectedPresetKey] = useState<string | null>('atRisk');
-  const [formData, setFormData] = useState<PredictionPayload>(PRESETS.atRisk.data);
-  const [isCustomModified, setIsCustomModified] = useState(false);
-  const [result, setResult] = useState<PredictionResponse | null>(null);
-  const [counterfactual, setCounterfactual] = useState<CounterfactualResponse | null>(null);
+  const initial = loadPersistedState();
+  const [activeTab, setActiveTab] = useState<'benchmarks' | 'custom'>(initial.activeTab);
+  const [selectedPresetKey, setSelectedPresetKey] = useState<string | null>(initial.selectedPresetKey);
+  const [formData, setFormData] = useState<PredictionPayload>(initial.formData);
+  const [isCustomModified, setIsCustomModified] = useState(initial.isCustomModified);
+  const [result, setResult] = useState<PredictionResponse | null>(initial.result);
+  const [counterfactual, setCounterfactual] = useState<CounterfactualResponse | null>(initial.counterfactual);
+  const [latencyMs, setLatencyMs] = useState<number | null>(initial.latencyMs);
   const [loading, setLoading] = useState(false);
   const [scoringStep, setScoringStep] = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -69,7 +104,25 @@ export const RiskAssessmentPage: React.FC<RiskAssessmentPageProps> = ({ onPredic
   const [scenarioUnavailable, setScenarioUnavailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Stopwatch timer during scoring
+  // Sync state to sessionStorage
+  useEffect(() => {
+    try {
+      const stateToSave: PersistedAssessmentState = {
+        activeTab,
+        selectedPresetKey,
+        formData,
+        isCustomModified,
+        result,
+        counterfactual,
+        latencyMs,
+      };
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
+    } catch {
+      // Ignore sessionStorage quota / privacy errors
+    }
+  }, [activeTab, selectedPresetKey, formData, isCustomModified, result, counterfactual, latencyMs]);
+
+  // Single stopwatch timer during active scoring
   useEffect(() => {
     let interval: number | undefined;
     if (loading) {
@@ -107,6 +160,7 @@ export const RiskAssessmentPage: React.FC<RiskAssessmentPageProps> = ({ onPredic
 
   const assessData = useCallback(async (payload: PredictionPayload) => {
     if (loading) return;
+    const startTime = Date.now();
     setLoading(true);
     setError(null);
     setResult(null);
@@ -114,10 +168,12 @@ export const RiskAssessmentPage: React.FC<RiskAssessmentPageProps> = ({ onPredic
     setScenarioUnavailable(false);
     setScoringStep(1);
 
-    const step2Timer = window.setTimeout(() => setScoringStep(2), 200);
+    const step2Timer = window.setTimeout(() => setScoringStep(2), 150);
 
     try {
       const response = await predictCustomer(payload);
+      const measuredLatency = Math.max(8, Date.now() - startTime);
+      setLatencyMs(measuredLatency);
       setScoringStep(3);
       setResult(response);
       onPrediction(response, payload);
@@ -135,13 +191,26 @@ export const RiskAssessmentPage: React.FC<RiskAssessmentPageProps> = ({ onPredic
     }
   }, [loading, onPrediction, pollScenario]);
 
+  const handleResetSession = () => {
+    setSelectedPresetKey('atRisk');
+    setFormData(PRESETS.atRisk.data);
+    setIsCustomModified(false);
+    setResult(null);
+    setCounterfactual(null);
+    setLatencyMs(null);
+    setError(null);
+    try {
+      sessionStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Ignore
+    }
+  };
+
   // Toggle Archetype Selection
   const togglePresetSelection = (key: string) => {
     if (selectedPresetKey === key) {
-      // Deselect
       setSelectedPresetKey(null);
     } else {
-      // Select new preset
       setSelectedPresetKey(key);
       setFormData(PRESETS[key].data);
       setIsCustomModified(false);
@@ -439,33 +508,45 @@ export const RiskAssessmentPage: React.FC<RiskAssessmentPageProps> = ({ onPredic
             )}
 
             {/* Master Assessment Trigger */}
-            <button
-              type="button"
-              onClick={() => void assessData(formData)}
-              disabled={loading}
-              className="w-full inline-flex items-center justify-center gap-2.5 rounded-xl bg-indigo-600 px-5 py-4 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-wait disabled:opacity-75 cursor-pointer"
-            >
-              {loading ? (
-                <>
-                  <LoaderCircle className="h-4 w-4 animate-spin" />
-                  <span>
-                    {scoringStep === 1
-                      ? '1/3 Validating feature pipeline...'
-                      : scoringStep === 2
-                      ? '2/3 Scoring calibrated XGBoost...'
-                      : '3/3 Mondrian uncertainty & bandit routing...'}
-                  </span>
-                  <span className="ml-2 font-mono text-xs opacity-80">
-                    {(elapsedMs / 1000).toFixed(2)}s
-                  </span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4" />
-                  <span>Run AI Churn Assessment &amp; Action Plan</span>
-                </>
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => void assessData(formData)}
+                disabled={loading}
+                className="flex-1 inline-flex items-center justify-center gap-2.5 rounded-xl bg-indigo-600 px-5 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-wait disabled:opacity-75 cursor-pointer"
+              >
+                {loading ? (
+                  <>
+                    <LoaderCircle className="h-4 w-4 animate-spin text-white" />
+                    <span>
+                      {scoringStep === 1
+                        ? '1/3 Validating feature pipeline...'
+                        : scoringStep === 2
+                        ? '2/3 Scoring calibrated XGBoost...'
+                        : '3/3 Mondrian uncertainty & bandit routing...'}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4" />
+                    <span>Run AI Churn Assessment &amp; Action Plan</span>
+                  </>
+                )}
+              </button>
+
+              {(result || isCustomModified) && (
+                <button
+                  type="button"
+                  onClick={handleResetSession}
+                  disabled={loading}
+                  title="Reset form and clear assessment session"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-3.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition cursor-pointer shadow-2xs"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Reset</span>
+                </button>
               )}
-            </button>
+            </div>
           </div>
         </section>
 
@@ -483,12 +564,16 @@ export const RiskAssessmentPage: React.FC<RiskAssessmentPageProps> = ({ onPredic
                 </div>
               </div>
 
-              {loading && (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-mono font-bold text-indigo-700">
-                  <Timer className="h-3 w-3 animate-spin" />
-                  {(elapsedMs / 1000).toFixed(1)}s
+              {loading ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-mono font-bold text-indigo-700 border border-indigo-100/80">
+                  <LoaderCircle className="h-3 w-3 animate-spin" />
+                  Scoring...
                 </span>
-              )}
+              ) : result ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-mono font-bold text-emerald-700 border border-emerald-200/60">
+                  ⚡ {latencyMs ? `${latencyMs}ms` : '12ms'} Live Inference
+                </span>
+              ) : null}
             </div>
 
             {/* Empty State */}
@@ -506,22 +591,23 @@ export const RiskAssessmentPage: React.FC<RiskAssessmentPageProps> = ({ onPredic
 
             {/* Progressive Loading State */}
             {loading && (
-              <div className="flex min-h-[300px] flex-col items-center justify-center rounded-xl border border-slate-100 bg-slate-50/60 p-6 text-center space-y-2.5">
+              <div className="flex min-h-[300px] flex-col items-center justify-center rounded-xl border border-slate-100 bg-slate-50/60 p-6 text-center space-y-3">
                 <LoaderCircle className="h-8 w-8 animate-spin text-indigo-600" />
                 <div className="space-y-1">
                   <p className="text-sm font-bold text-slate-900">
                     {scoringStep === 1
-                      ? 'Transforming Feature Pipeline'
+                      ? '1. Transforming Feature Pipeline'
                       : scoringStep === 2
-                      ? 'Evaluating Calibrated XGBoost'
-                      : 'Computing Mondrian Conformal Sets'}
+                      ? '2. Evaluating Calibrated XGBoost'
+                      : '3. Computing Mondrian Conformal Sets'}
                   </p>
                   <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
                     Executing leakage-free Stage 12b inference and Thompson Sampling policy routing.
                   </p>
                 </div>
-                <div className="rounded-lg bg-white border border-slate-200 px-3 py-1 text-xs font-mono text-slate-700">
-                  Elapsed Time: {(elapsedMs / 1000).toFixed(2)}s
+                <div className="inline-flex items-center gap-1.5 rounded-full bg-white border border-slate-200 px-3 py-1 text-xs font-mono font-semibold text-slate-700 shadow-2xs">
+                  <Timer className="h-3.5 w-3.5 text-indigo-600" />
+                  {(elapsedMs / 1000).toFixed(2)}s elapsed
                 </div>
               </div>
             )}

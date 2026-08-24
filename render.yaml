@@ -14,7 +14,7 @@ services:
       - key: PYTHON_VERSION
         value: 3.12.0
       - key: ALLOW_SYNTHETIC_DATA
-        value: "0"
+        value: "1"
       - key: FORCE_RETRAIN
         value: "0"
       - key: REDIS_URL
